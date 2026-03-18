@@ -1,231 +1,412 @@
-import { useState, useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import {
   View,
   Text,
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  TextInput,
+  SafeAreaView,
+  StatusBar,
+  useWindowDimensions,
 } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
-import { getAllRecipes, type Recipe } from '../lib/database';
+import { useRouter, useFocusEffect, Stack } from 'expo-router';
+import { getMealPlan, getRecipeById, setMeal, type Recipe } from '../lib/database';
+import { colors, typography, spacing, radii, shadows } from '../lib/theme';
+import { TabBar } from '../lib/TabBar';
 
-const CATEGORIES = ['Toutes', 'Entrée', 'Plat', 'Dessert'];
+// ─── Helpers date ─────────────────────────────────────────────
 
-const CATEGORY_COLORS: Record<string, string> = {
-  Entrée: '#4CAF50',
-  Plat: '#FF6B35',
-  Dessert: '#9C27B0',
+const DAYS_COUNT = 7;
+
+const DAYS_FR = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+const MONTHS_FR = [
+  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+];
+
+function getDateString(offset: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  return d.toISOString().split('T')[0];
+}
+
+function formatDayLabel(dateStr: string, offset: number): { main: string; sub: string } {
+  const d = new Date(dateStr + 'T12:00:00');
+  const dayNum = d.getDate();
+  const month = MONTHS_FR[d.getMonth()];
+  const dayName = DAYS_FR[d.getDay()];
+  if (offset === 0) return { main: "Aujourd'hui", sub: `${dayName} ${dayNum} ${month}` };
+  if (offset === 1) return { main: 'Demain', sub: `${dayName} ${dayNum} ${month}` };
+  return { main: dayName, sub: `${dayNum} ${month}` };
+}
+
+// ─── Types ────────────────────────────────────────────────────
+
+type DayData = {
+  dateStr: string;
+  label: { main: string; sub: string };
+  lunchRecipe: Recipe | null;
+  dinnerRecipe: Recipe | null;
 };
 
-export default function HomeScreen() {
-  const router = useRouter();
-  const [recipes, setRecipes] = useState<Recipe[]>([]);
-  const [search, setSearch] = useState('');
-  const [activeCategory, setActiveCategory] = useState('Toutes');
+// ─── Sous-composant : créneau repas ──────────────────────────
 
-  useFocusEffect(
-    useCallback(() => {
-      setRecipes(getAllRecipes());
-    }, [])
-  );
+interface MealSlotProps {
+  icon: string;
+  label: string;
+  recipe: Recipe | null;
+  onPick: () => void;
+  onView: () => void;
+  onClear: () => void;
+}
 
-  const filtered = recipes.filter((r) => {
-    const matchSearch = r.title.toLowerCase().includes(search.toLowerCase());
-    const matchCat = activeCategory === 'Toutes' || r.category === activeCategory;
-    return matchSearch && matchCat;
-  });
-
+function MealSlot({ icon, label, recipe, onPick, onView, onClear }: MealSlotProps) {
   return (
-    <View style={styles.container}>
-      {/* Barre de recherche */}
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Rechercher une recette..."
-          placeholderTextColor="#999"
-          value={search}
-          onChangeText={setSearch}
-        />
+    <View style={styles.slot}>
+      <View style={styles.slotHeader}>
+        <Text style={styles.slotIcon}>{icon}</Text>
+        <Text style={styles.slotLabel}>{label}</Text>
       </View>
 
-      {/* Filtres catégories */}
-      <View style={styles.filterRow}>
-        {CATEGORIES.map((cat) => (
-          <TouchableOpacity
-            key={cat}
-            style={[styles.filterBtn, activeCategory === cat && styles.filterBtnActive]}
-            onPress={() => setActiveCategory(cat)}
-          >
-            <Text style={[styles.filterText, activeCategory === cat && styles.filterTextActive]}>
-              {cat}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Liste des recettes */}
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => String(item.id)}
-        contentContainerStyle={styles.list}
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>Aucune recette trouvée.</Text>
-        }
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => router.push(`/recipe/${item.id}`)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.cardContent}>
-              <Text style={styles.cardTitle}>{item.title}</Text>
-              <Text style={styles.cardDesc} numberOfLines={2}>
-                {item.description}
+      {recipe ? (
+        <View style={styles.recipeRow}>
+          <TouchableOpacity style={styles.recipeCard} onPress={onView} activeOpacity={0.75}>
+            <View style={styles.recipeCardBody}>
+              <Text style={styles.recipeTitle}>{recipe.title}</Text>
+              <Text style={styles.recipeMeta}>
+                {recipe.category} · ⏱ {recipe.prep_time} min
               </Text>
-              <View style={styles.cardFooter}>
-                <View
-                  style={[
-                    styles.categoryBadge,
-                    { backgroundColor: CATEGORY_COLORS[item.category] ?? '#888' },
-                  ]}
-                >
-                  <Text style={styles.categoryText}>{item.category}</Text>
-                </View>
-                <Text style={styles.prepTime}>⏱ {item.prep_time} min</Text>
-              </View>
             </View>
+            <Text style={styles.recipeChevron}>›</Text>
           </TouchableOpacity>
-        )}
-      />
-
-      {/* Bouton ajout */}
-      <TouchableOpacity style={styles.fab} onPress={() => router.push('/add')}>
-        <Text style={styles.fabText}>+</Text>
-      </TouchableOpacity>
+          {/* Bouton supprimer le repas du créneau */}
+          <TouchableOpacity style={styles.clearBtn} onPress={onClear} activeOpacity={0.7}>
+            <Text style={styles.clearBtnText}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <TouchableOpacity style={styles.pickBtn} onPress={onPick} activeOpacity={0.8}>
+          <Text style={styles.pickBtnText}>+ Choisir une recette</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
 
+// ─── Sous-composant : page d'un jour ─────────────────────────
+
+interface DayPageProps {
+  day: DayData;
+  width: number;
+  height: number;
+  router: ReturnType<typeof useRouter>;
+  onClearMeal: (dateStr: string, slot: 'lunch' | 'dinner') => void;
+}
+
+function DayPage({ day, width, height, router, onClearMeal }: DayPageProps) {
+  return (
+    <View style={[styles.page, { width, height }]}>
+      <View style={styles.dayLabelBlock}>
+        <Text style={styles.dayMain}>{day.label.main}</Text>
+        <Text style={styles.daySub}>{day.label.sub}</Text>
+      </View>
+
+      <View style={styles.slotsContainer}>
+        <MealSlot
+          icon="☀️"
+          label="Midi"
+          recipe={day.lunchRecipe}
+          onPick={() => router.push(`/calendar/pick?date=${day.dateStr}&slot=lunch`)}
+          onView={() => router.push(`/recipe/${day.lunchRecipe!.id}`)}
+          onClear={() => onClearMeal(day.dateStr, 'lunch')}
+        />
+        <MealSlot
+          icon="🌙"
+          label="Soir"
+          recipe={day.dinnerRecipe}
+          onPick={() => router.push(`/calendar/pick?date=${day.dateStr}&slot=dinner`)}
+          onView={() => router.push(`/recipe/${day.dinnerRecipe!.id}`)}
+          onClear={() => onClearMeal(day.dateStr, 'dinner')}
+        />
+      </View>
+    </View>
+  );
+}
+
+// ─── Écran principal ─────────────────────────────────────────
+
+export default function TodayScreen() {
+  const router = useRouter();
+  const { width } = useWindowDimensions();
+  const [days, setDays] = useState<DayData[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [bodyHeight, setBodyHeight] = useState(0);
+
+  const loadData = useCallback(() => {
+    const loaded: DayData[] = Array.from({ length: DAYS_COUNT }, (_, offset) => {
+      const dateStr = getDateString(offset);
+      const plan = getMealPlan(dateStr);
+      return {
+        dateStr,
+        label: formatDayLabel(dateStr, offset),
+        lunchRecipe: plan.lunch ? getRecipeById(plan.lunch) : null,
+        dinnerRecipe: plan.dinner ? getRecipeById(plan.dinner) : null,
+      };
+    });
+    setDays(loaded);
+  }, []);
+
+  useFocusEffect(loadData);
+
+  function handleClearMeal(dateStr: string, slot: 'lunch' | 'dinner') {
+    setMeal(dateStr, slot, null);
+    loadData();
+  }
+
+  return (
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <StatusBar barStyle="light-content" backgroundColor={colors.dark} />
+
+      <View style={styles.root}>
+        {/* Header fixe */}
+        <SafeAreaView style={styles.header}>
+          <Text style={styles.headerTitle}>Menu du jour</Text>
+        </SafeAreaView>
+
+        {/* Zone swipeable */}
+        <View
+          style={styles.body}
+          onLayout={(e) => setBodyHeight(e.nativeEvent.layout.height)}
+        >
+          {bodyHeight > 0 && (
+            <FlatList
+              data={days}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              bounces={false}
+              getItemLayout={(_, index) => ({
+                length: width,
+                offset: width * index,
+                index,
+              })}
+              onMomentumScrollEnd={(e) => {
+                const index = Math.round(e.nativeEvent.contentOffset.x / width);
+                setCurrentIndex(index);
+              }}
+              keyExtractor={(item) => item.dateStr}
+              renderItem={({ item }) => (
+                <DayPage
+                  day={item}
+                  width={width}
+                  height={bodyHeight}
+                  router={router}
+                  onClearMeal={handleClearMeal}
+                />
+              )}
+            />
+          )}
+        </View>
+
+        <TabBar />
+      </View>
+    </>
+  );
+}
+
+// ─── Styles ───────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
-    backgroundColor: '#FFF9F5',
+    backgroundColor: colors.background,
   },
-  searchContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
+
+  // Header
+  header: {
+    backgroundColor: colors.dark,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.lg,
   },
-  searchInput: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    fontSize: 15,
-    borderWidth: 1,
-    borderColor: '#E0D5CC',
-    color: '#333',
+  headerTitle: {
+    fontSize: typography.fontSizes.sm,
+    fontWeight: typography.fontWeights.bold,
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
   },
-  filterRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    gap: 8,
+
+  // Body
+  body: {
+    flex: 1,
   },
-  filterBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#E0D5CC',
+
+  // Page d'un jour
+  page: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.lg,
+    justifyContent: 'center',
+    gap: spacing.xxl,
   },
-  filterBtnActive: {
-    backgroundColor: '#FF6B35',
-    borderColor: '#FF6B35',
+  dayLabelBlock: {
+    gap: spacing.xs,
   },
-  filterText: {
-    fontSize: 13,
-    color: '#666',
-    fontWeight: '500',
+  dayMain: {
+    fontSize: 34,
+    fontWeight: typography.fontWeights.extraBold,
+    color: colors.textPrimary,
+    letterSpacing: -0.5,
   },
-  filterTextActive: {
-    color: '#fff',
+  daySub: {
+    fontSize: typography.fontSizes.md,
+    color: colors.textSecondary,
+    fontWeight: typography.fontWeights.medium,
   },
-  list: {
-    paddingHorizontal: 16,
-    paddingBottom: 100,
-    gap: 12,
+
+  // Slots
+  slotsContainer: {
+    gap: spacing.lg,
   },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 6,
-    elevation: 3,
+  slot: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    padding: spacing.xl,
+    gap: spacing.lg,
+    ...shadows.md,
   },
-  cardContent: {
-    padding: 16,
-  },
-  cardTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#1A1A1A',
-    marginBottom: 4,
-  },
-  cardDesc: {
-    fontSize: 13,
-    color: '#777',
-    lineHeight: 18,
-    marginBottom: 10,
-  },
-  cardFooter: {
+  slotHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: spacing.sm,
   },
-  categoryBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 12,
+  slotIcon: {
+    fontSize: 20,
   },
-  categoryText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
+  slotLabel: {
+    fontSize: typography.fontSizes.sm,
+    fontWeight: typography.fontWeights.bold,
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
-  prepTime: {
-    fontSize: 13,
-    color: '#888',
+
+  // Recette sélectionnée
+  recipeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
-  emptyText: {
-    textAlign: 'center',
-    marginTop: 60,
-    color: '#aaa',
-    fontSize: 15,
+  recipeCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    gap: spacing.md,
   },
-  fab: {
-    position: 'absolute',
-    bottom: 30,
-    right: 24,
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: '#FF6B35',
+  recipeCardBody: {
+    flex: 1,
+  },
+  recipeTitle: {
+    fontSize: typography.fontSizes.xl,
+    fontWeight: typography.fontWeights.bold,
+    color: colors.textPrimary,
+  },
+  recipeMeta: {
+    fontSize: typography.fontSizes.sm,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+  },
+  recipeChevron: {
+    fontSize: 26,
+    color: colors.textSecondary,
+  },
+  clearBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FEE2E2',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#FF6B35',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 6,
+    flexShrink: 0,
   },
-  fabText: {
-    fontSize: 30,
-    color: '#fff',
-    lineHeight: 34,
+  clearBtnText: {
+    fontSize: 14,
+    color: '#DC2626',
+    fontWeight: typography.fontWeights.bold,
+  },
+
+  // Bouton choisir
+  pickBtn: {
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderStyle: 'dashed',
+    borderRadius: radii.lg,
+    paddingVertical: spacing.lg,
+    alignItems: 'center',
+  },
+  pickBtnText: {
+    fontSize: typography.fontSizes.md,
+    fontWeight: typography.fontWeights.bold,
+    color: colors.primary,
+  },
+
+  // Dots
+  dots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.border,
+  },
+  dotActive: {
+    width: 20,
+    backgroundColor: colors.primary,
+  },
+
+  // Footer nav bar
+  footer: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  footerBtn: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  footerBtnActive: {
+    borderTopWidth: 2,
+    borderTopColor: colors.primary,
+    marginTop: -1,
+  },
+  footerBtnIcon: {
+    fontSize: 20,
+  },
+  footerBtnIconActive: {
+    fontSize: 20,
+  },
+  footerBtnLabel: {
+    fontSize: typography.fontSizes.xs,
+    fontWeight: typography.fontWeights.medium,
+    color: colors.textSecondary,
+  },
+  footerBtnLabelActive: {
+    fontSize: typography.fontSizes.xs,
+    fontWeight: typography.fontWeights.bold,
+    color: colors.primary,
   },
 });

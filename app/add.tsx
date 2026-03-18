@@ -21,6 +21,7 @@ export default function AddScreen() {
   const [category, setCategory] = useState('Plat');
   const [prepTime, setPrepTime] = useState('');
   const [description, setDescription] = useState('');
+  const [ingredients, setIngredients] = useState('');
 
   function handleSave() {
     if (!title.trim()) {
@@ -41,6 +42,7 @@ export default function AddScreen() {
       category,
       prep_time: Number(prepTime),
       description: description.trim(),
+      ingredients: ingredients.trim(),
     });
 
     router.back();
@@ -98,6 +100,19 @@ export default function AddScreen() {
           onChangeText={setDescription}
         />
 
+        <Text style={styles.label}>Ingrédients</Text>
+        <Text style={styles.inputHint}>Un ingrédient par ligne</Text>
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          placeholder={'Pâtes (400g)\nGuanciale\nŒufs\n...'}
+          placeholderTextColor="#bbb"
+          multiline
+          numberOfLines={6}
+          textAlignVertical="top"
+          value={ingredients}
+          onChangeText={setIngredients}
+        />
+
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
           <Text style={styles.saveBtnText}>Enregistrer la recette</Text>
         </TouchableOpacity>
@@ -135,8 +150,14 @@ const styles = StyleSheet.create({
     borderColor: '#E0D5CC',
   },
   textArea: {
-    height: 120,
+    height: 130,
     paddingTop: 12,
+  },
+  inputHint: {
+    fontSize: 12,
+    color: '#aaa',
+    marginBottom: 6,
+    marginTop: -4,
   },
   categoryRow: {
     flexDirection: 'row',

@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { initDatabase } from '../lib/database';
+import { colors } from '../lib/theme';
 
 export default function RootLayout() {
   useEffect(() => {
@@ -10,27 +11,22 @@ export default function RootLayout() {
 
   return (
     <>
-      <StatusBar style="dark" />
+      <StatusBar style="light" />
       <Stack
         screenOptions={{
-          headerStyle: { backgroundColor: '#FF6B35' },
-          headerTintColor: '#fff',
+          headerStyle: { backgroundColor: colors.dark },
+          headerTintColor: colors.surface,
           headerTitleStyle: { fontWeight: 'bold' },
-          contentStyle: { backgroundColor: '#FFF9F5' },
+          contentStyle: { backgroundColor: colors.background },
         }}
       >
-        <Stack.Screen
-          name="index"
-          options={{ title: 'Cuisinator 3000' }}
-        />
-        <Stack.Screen
-          name="recipe/[id]"
-          options={{ title: 'Recette' }}
-        />
-        <Stack.Screen
-          name="add"
-          options={{ title: 'Nouvelle recette', presentation: 'modal' }}
-        />
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="recipes/index" options={{ title: 'Mes recettes' }} />
+        <Stack.Screen name="courses/index" options={{ headerShown: false }} />
+        <Stack.Screen name="recipe/[id]" options={{ title: 'Recette' }} />
+        <Stack.Screen name="add" options={{ title: 'Nouvelle recette', presentation: 'modal' }} />
+        <Stack.Screen name="calendar/index" options={{ title: 'Mon planning' }} />
+        <Stack.Screen name="calendar/pick" options={{ title: 'Choisir une recette', presentation: 'modal' }} />
       </Stack>
     </>
   );
