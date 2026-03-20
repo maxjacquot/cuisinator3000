@@ -42,7 +42,7 @@ function loadRecipes(): Recipe[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const items: Recipe[] = raw ? JSON.parse(raw) : [];
-    return items.map((r) => ({ cook_time: 0, steps: '', ingredients: '', ...r }));
+    return items.map((r) => ({ ...r, cook_time: r.cook_time ?? 0, steps: r.steps ?? '', ingredients: r.ingredients ?? '' }));
   } catch {
     return [];
   }
@@ -77,8 +77,12 @@ export function getRecipeById(id: number): Recipe | null {
 
 export function addRecipe(recipe: Omit<Recipe, 'id'>): void {
   const recipes = loadRecipes();
-  recipes.push({ cook_time: 0, steps: '', ...recipe, id: nextId(recipes) });
+  recipes.push({ ...recipe, cook_time: recipe.cook_time ?? 0, steps: recipe.steps ?? '', id: nextId(recipes) });
   saveRecipes(recipes);
+}
+
+export function updateRecipe(id: number, recipe: Omit<Recipe, 'id'>): void {
+  saveRecipes(loadRecipes().map((r) => r.id === id ? { ...recipe, id } : r));
 }
 
 export function deleteRecipe(id: number): void {

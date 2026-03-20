@@ -238,16 +238,17 @@ interface DayPageProps {
   day: DayData;
   width: number;
   height: number;
+  isToday: boolean;
   router: ReturnType<typeof useRouter>;
   onClearMeal: (dateStr: string, slot: 'lunch' | 'dinner') => void;
   onAddMeal: (dateStr: string, slot: 'lunch' | 'dinner') => void;
 }
 
-function DayPage({ day, width, height, router, onClearMeal, onAddMeal }: DayPageProps) {
+function DayPage({ day, width, height, isToday, router, onClearMeal, onAddMeal }: DayPageProps) {
   return (
     <View style={[styles.page, { width, height }]}>
       <View style={styles.dayLabelBlock}>
-        <Text style={styles.dayMain}>{day.label.main}</Text>
+        <Text style={[styles.dayMain, isToday && styles.dayMainToday]}>{day.label.main}</Text>
         <Text style={styles.daySub}>{day.label.sub}</Text>
       </View>
 
@@ -286,6 +287,7 @@ function HomePanel({ width, isFocused, focusKey }: HomePanelProps) {
   const insets = useSafeAreaInsets();
   const [days, setDays] = useState<DayData[]>([]);
   const [bodyHeight, setBodyHeight] = useState(0);
+  const [currentDayIdx, setCurrentDayIdx] = useState(0);
   // Étape 1 : choix de la recette
   const [pickerTarget, setPickerTarget] = useState<{ dateStr: string; slot: 'lunch' | 'dinner' } | null>(null);
   // Étape 2 : planning modal avec la recette choisie + pré-sélection du créneau
@@ -328,6 +330,10 @@ function HomePanel({ width, isFocused, focusKey }: HomePanelProps) {
     loadData();
   }
 
+  const plannedCount = days.reduce((acc, d) => {
+    return acc + (d.lunchRecipe ? 1 : 0) + (d.dinnerRecipe ? 1 : 0);
+  }, 0);
+
   return (
     <View style={[styles.homeRoot, { width }]} pointerEvents={isFocused ? 'auto' : 'none'}>
       {/* Header */}
@@ -335,11 +341,25 @@ function HomePanel({ width, isFocused, focusKey }: HomePanelProps) {
         <View style={styles.headerContent}>
           <View>
             <Text style={styles.headerTitle}>Menu du jour</Text>
-            <Text style={styles.headerSub}>Planifie tes repas de la semaine</Text>
+            <Text style={styles.headerSub}>
+              {plannedCount === 0
+                ? 'Aucun repas planifié'
+                : `${plannedCount} repas planifié${plannedCount > 1 ? 's' : ''} cette semaine`}
+            </Text>
           </View>
-          <View style={styles.headerBadge}>
-            <Text style={styles.headerBadgeText}>7 jours</Text>
+          <View style={[
+            styles.headerBadge,
+            plannedCount > 0 && styles.headerBadgeActive,
+          ]}>
+            <Text style={styles.headerBadgeText}>
+              {plannedCount}/14
+            </Text>
           </View>
+        </View>
+
+        {/* Barre de progression */}
+        <View style={styles.progressBar}>
+          <View style={[styles.progressFill, { width: `${(plannedCount / 14) * 100}%` as any }]} />
         </View>
       </View>
 
@@ -357,11 +377,16 @@ function HomePanel({ width, isFocused, focusKey }: HomePanelProps) {
             bounces={false}
             getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
             keyExtractor={(item) => item.dateStr}
-            renderItem={({ item }) => (
+            onMomentumScrollEnd={(e) => {
+              const idx = Math.round(e.nativeEvent.contentOffset.x / width);
+              setCurrentDayIdx(idx);
+            }}
+            renderItem={({ item, index }) => (
               <DayPage
                 day={item}
                 width={width}
                 height={bodyHeight}
+                isToday={index === 0}
                 router={router}
                 onClearMeal={handleClearMeal}
                 onAddMeal={(dateStr, slot) => setPickerTarget({ dateStr, slot })}
@@ -369,6 +394,21 @@ function HomePanel({ width, isFocused, focusKey }: HomePanelProps) {
             )}
           />
         )}
+      </View>
+
+      {/* Dots de pagination */}
+      <View style={styles.dots}>
+        {days.map((_, i) => (
+          <View
+            key={i}
+            style={[
+              styles.dot,
+              i === currentDayIdx && styles.dotActive,
+              i === 0 && styles.dotToday,
+              i === 0 && i === currentDayIdx && styles.dotTodayActive,
+            ]}
+          />
+        ))}
       </View>
 
       {/* Étape 1 : choix de la recette */}
@@ -477,17 +517,57 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   headerBadge: {
-    backgroundColor: colors.primary,
+    backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: radii.full,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
+  },
+  headerBadgeActive: {
+    backgroundColor: colors.primary,
   },
   headerBadgeText: {
     fontSize: typography.fontSizes.sm,
     fontWeight: typography.fontWeights.bold,
     color: colors.surface,
   },
+  progressBar: {
+    height: 3,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: radii.full,
+    marginTop: spacing.lg,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: 3,
+    backgroundColor: colors.primary,
+    borderRadius: radii.full,
+  },
   body: { flex: 1 },
+  dots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.background,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.border,
+  },
+  dotActive: {
+    width: 18,
+    backgroundColor: colors.textSecondary,
+  },
+  dotToday: {
+    backgroundColor: colors.primary + '55',
+  },
+  dotTodayActive: {
+    width: 18,
+    backgroundColor: colors.primary,
+  },
 
   // Page d'un jour
   page: {
@@ -503,6 +583,9 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeights.extraBold,
     color: colors.textPrimary,
     letterSpacing: -0.5,
+  },
+  dayMainToday: {
+    color: colors.primary,
   },
   daySub: {
     fontSize: typography.fontSizes.md,

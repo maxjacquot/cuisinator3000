@@ -118,6 +118,13 @@ export function addRecipe(recipe: Omit<Recipe, 'id'>): void {
   );
 }
 
+export function updateRecipe(id: number, recipe: Omit<Recipe, 'id'>): void {
+  db.runSync(
+    'UPDATE recipes SET title=?, category=?, prep_time=?, cook_time=?, description=?, ingredients=?, steps=?, tags=? WHERE id=?;',
+    [recipe.title, recipe.category, recipe.prep_time, recipe.cook_time ?? 0, recipe.description, recipe.ingredients, recipe.steps ?? '', recipe.tags ?? '[]', id]
+  );
+}
+
 export function deleteRecipe(id: number): void {
   db.runSync('DELETE FROM recipes WHERE id = ?;', [id]);
 }
