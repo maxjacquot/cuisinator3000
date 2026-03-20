@@ -12,7 +12,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getAllRecipes, type Recipe } from '../database';
 import { colors, typography, spacing, radii, shadows, Badge } from '../theme';
 import { ImportModal } from '../ImportModal';
-import { AddRecipeModal } from '../AddRecipeModal';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -81,7 +80,6 @@ export function RecipesPanel({ width, isFocused, focusKey }: RecipesPanelProps) 
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState('Toutes');
   const [importVisible, setImportVisible] = useState(false);
-  const [addVisible, setAddVisible] = useState(false);
 
   useEffect(() => {
     if (isFocused) setRecipes(getAllRecipes());
@@ -106,13 +104,6 @@ export function RecipesPanel({ width, isFocused, focusKey }: RecipesPanelProps) 
           >
             <Text style={s.importBtnText}>Importer</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[s.importBtn, s.addBtn]}
-            onPress={() => setAddVisible(true)}
-            activeOpacity={0.7}
-          >
-            <Text style={s.importBtnText}>＋ Ajouter</Text>
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -121,14 +112,6 @@ export function RecipesPanel({ width, isFocused, focusKey }: RecipesPanelProps) 
         onClose={() => setImportVisible(false)}
         onImported={() => {
           setImportVisible(false);
-          setRecipes(getAllRecipes());
-        }}
-      />
-      <AddRecipeModal
-        visible={addVisible}
-        onClose={() => setAddVisible(false)}
-        onAdded={() => {
-          setAddVisible(false);
           setRecipes(getAllRecipes());
         }}
       />
@@ -211,9 +194,6 @@ const s = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs + 2,
     borderRadius: radii.full,
-  },
-  addBtn: {
-    backgroundColor: colors.primary,
   },
   importBtnText: {
     color: colors.surface,
