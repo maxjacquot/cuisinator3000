@@ -53,7 +53,17 @@ function RecipeCard({ recipe, onPress }: RecipeCardProps) {
       </View>
       <View style={styles.cardBody}>
         <Text style={styles.cardTitle} numberOfLines={1}>{recipe.title}</Text>
-        <Text style={styles.cardMeta}>⏱ {recipe.prep_time} min</Text>
+        <View style={styles.cardMetaRow}>
+          {recipe.cook_time > 0 ? (
+            <>
+              <Text style={styles.cardMeta}>🔪 {recipe.prep_time - recipe.cook_time} min</Text>
+              <Text style={styles.cardMetaSep}>·</Text>
+              <Text style={[styles.cardMeta, styles.cardMetaCook]}>🔥 {recipe.cook_time} min</Text>
+            </>
+          ) : (
+            <Text style={styles.cardMeta}>⏱ {recipe.prep_time} min</Text>
+          )}
+        </View>
         <Badge label={badge.label} color={badge.color} style={styles.badge} />
       </View>
     </TouchableOpacity>
@@ -89,6 +99,7 @@ export default function RecipesScreen() {
           headerStyle: { backgroundColor: colors.dark },
           headerTintColor: colors.surface,
           headerTitleStyle: { fontWeight: 'bold' },
+          headerBackVisible: false,
         }}
       />
       <View style={styles.root}>
@@ -135,11 +146,6 @@ export default function RecipesScreen() {
             />
           )}
         />
-
-        {/* FAB ajout */}
-        <TouchableOpacity style={styles.fab} onPress={() => router.push('/add')}>
-          <Text style={styles.fabText}>+</Text>
-        </TouchableOpacity>
 
         <TabBar />
       </View>
@@ -237,28 +243,23 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeights.bold,
     color: colors.textPrimary,
   },
+  cardMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
   cardMeta: {
     fontSize: typography.fontSizes.sm,
     color: colors.textSecondary,
   },
+  cardMetaSep: {
+    fontSize: typography.fontSizes.sm,
+    color: colors.border,
+  },
+  cardMetaCook: {
+    color: '#E53E3E',
+  },
   badge: {
     alignSelf: 'flex-start',
-  },
-  fab: {
-    position: 'absolute',
-    bottom: 30,
-    right: spacing.xxl,
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.primary,
-  },
-  fabText: {
-    fontSize: 28,
-    color: colors.surface,
-    lineHeight: 32,
   },
 });

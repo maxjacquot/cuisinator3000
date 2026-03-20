@@ -1,28 +1,11 @@
 import * as SQLite from 'expo-sqlite';
+import { SEED_RECIPES, toDbFormat } from './data/recipes';
+export type { ImportResult } from './data/importRecipes';
 
-export type Recipe = {
-  id: number;
-  title: string;
-  category: string;
-  prep_time: number;
-  description: string;
-  ingredients: string; // un ingrédient par ligne
-};
+// ─── Re-exports des types ──────────────────────────────────────
+export type { StepType, RecipeStep, Recipe, ShoppingItem, MealSlot, MealPlan } from './types';
 
-export type ShoppingItem = {
-  id: number;
-  name: string;
-  recipe_name: string;
-  done: number; // 0 | 1
-};
-
-export type MealSlot = 'lunch' | 'dinner';
-
-export type MealPlan = {
-  date: string;
-  lunch: number | null;
-  dinner: number | null;
-};
+// ─── Init ─────────────────────────────────────────────────────
 
 const db = SQLite.openDatabaseSync('cuisinator.db');
 
@@ -33,17 +16,12 @@ export function initDatabase() {
       title TEXT NOT NULL,
       category TEXT NOT NULL,
       prep_time INTEGER NOT NULL,
+      cook_time INTEGER NOT NULL DEFAULT 0,
       description TEXT NOT NULL,
-      ingredients TEXT NOT NULL DEFAULT ''
+      ingredients TEXT NOT NULL DEFAULT '',
+      steps TEXT NOT NULL DEFAULT ''
     );
   `);
-
-  // Migration : ajoute la colonne ingredients si elle n'existe pas encore
-  try {
-    db.execSync(`ALTER TABLE recipes ADD COLUMN ingredients TEXT NOT NULL DEFAULT '';`);
-  } catch {
-    // Colonne déjà présente, on ignore
-  }
 
   db.execSync(`
     CREATE TABLE IF NOT EXISTS meal_plans (
@@ -62,88 +40,66 @@ export function initDatabase() {
     );
   `);
 
+  // Migrations colonnes (idempotentes)
+  for (const col of [
+    `ALTER TABLE recipes ADD COLUMN ingredients TEXT NOT NULL DEFAULT '';`,
+    `ALTER TABLE recipes ADD COLUMN cook_time INTEGER NOT NULL DEFAULT 0;`,
+    `ALTER TABLE recipes ADD COLUMN steps TEXT NOT NULL DEFAULT '';`,
+  ]) {
+    try { db.execSync(col); } catch { /* déjà présente */ }
+  }
+
   const count = db.getFirstSync<{ count: number }>('SELECT COUNT(*) as count FROM recipes;');
   if (count?.count === 0) {
     seedDatabase();
   } else {
-    migrateIngredients();
-  }
-}
-
-// Remplit les ingrédients manquants sur les recettes existantes
-function migrateIngredients() {
-  const updates: Record<string, string> = {
-    'Pâtes carbonara': 'Pâtes (400g)\nGuanciale (150g)\n4 jaunes d\'œufs\nPecorino romano\nPoivre noir\nSel',
-    'Tarte aux pommes': 'Farine (250g)\nBeurre (125g)\nSucre (80g)\n4 pommes\n1 œuf\nSel\nCanelle',
-    'Soupe à l\'oignon': '4 oignons\nBouillon de bœuf (1L)\nBeurre (30g)\nFarine (1 c.s.)\nGruyère râpé\nBaguette\nVin blanc sec\nThym',
-    'Poulet rôti': '1 poulet entier\nBeurre (50g)\n4 gousses d\'ail\nHerbes de Provence\nSel\nPoivre\nHuile d\'olive',
-    'Salade niçoise': 'Thon en boîte\n4 œufs\nTomates cerises\nOlives noires\nSalade verte\nHaricots verts\nAnchois\nVinaigre',
-    'Crème brûlée': 'Crème liquide (500ml)\n6 jaunes d\'œufs\nSucre (100g)\n1 gousse de vanille\nCassonade',
-  };
-
-  for (const [title, ingredients] of Object.entries(updates)) {
-    db.runSync(
-      "UPDATE recipes SET ingredients = ? WHERE title = ? AND (ingredients = '' OR ingredients IS NULL);",
-      [ingredients, title]
-    );
+    migrateExistingRecipes();
   }
 }
 
 function seedDatabase() {
-  const recipes: Omit<Recipe, 'id'>[] = [
-    {
-      title: 'Pâtes carbonara',
-      category: 'Plat',
-      prep_time: 20,
-      description: 'Des pâtes crémeuses à la guanciale, oeufs et pecorino.',
-      ingredients: 'Pâtes (400g)\nGuanciale (150g)\n4 jaunes d\'œufs\nPecorino romano\nPoivre noir\nSel',
-    },
-    {
-      title: 'Tarte aux pommes',
-      category: 'Dessert',
-      prep_time: 60,
-      description: 'Une tarte maison avec une pâte brisée et des pommes caramélisées.',
-      ingredients: 'Farine (250g)\nBeurre (125g)\nSucre (80g)\n4 pommes\n1 œuf\nSel\nCanelle',
-    },
-    {
-      title: 'Soupe à l\'oignon',
-      category: 'Entrée',
-      prep_time: 45,
-      description: 'La classique soupe à l\'oignon gratinée au gruyère.',
-      ingredients: '4 oignons\nBouillon de bœuf (1L)\nBeurre (30g)\nFarine (1 c.s.)\nGruyère râpé\nBaguette\nVin blanc sec\nThym',
-    },
-    {
-      title: 'Poulet rôti',
-      category: 'Plat',
-      prep_time: 90,
-      description: 'Poulet entier rôti avec herbes de provence, ail et beurre.',
-      ingredients: '1 poulet entier\nBeurre (50g)\n4 gousses d\'ail\nHerbes de Provence\nSel\nPoivre\nHuile d\'olive',
-    },
-    {
-      title: 'Salade niçoise',
-      category: 'Entrée',
-      prep_time: 15,
-      description: 'Salade fraîche avec thon, œufs durs, tomates et olives.',
-      ingredients: 'Thon en boîte\n4 œufs\nTomates cerises\nOlives noires\nSalade verte\nHaricots verts\nAnchois\nVinaigre',
-    },
-    {
-      title: 'Crème brûlée',
-      category: 'Dessert',
-      prep_time: 40,
-      description: 'Crème vanillée avec une croûte de sucre caramélisé croustillante.',
-      ingredients: 'Crème liquide (500ml)\n6 jaunes d\'œufs\nSucre (100g)\n1 gousse de vanille\nCassonade',
-    },
-  ];
-
-  for (const recipe of recipes) {
+  for (const recipe of SEED_RECIPES) {
+    const r = toDbFormat(recipe);
     db.runSync(
-      'INSERT INTO recipes (title, category, prep_time, description, ingredients) VALUES (?, ?, ?, ?, ?);',
-      [recipe.title, recipe.category, recipe.prep_time, recipe.description, recipe.ingredients]
+      'INSERT INTO recipes (title, category, prep_time, cook_time, description, ingredients, steps) VALUES (?, ?, ?, ?, ?, ?, ?);',
+      [r.title, r.category, r.prep_time, r.cook_time, r.description, r.ingredients, r.steps]
     );
   }
 }
 
+/** Met à jour les recettes existantes qui n'ont pas encore leurs ingrédients/steps */
+function migrateExistingRecipes() {
+  for (const recipe of SEED_RECIPES) {
+    const r = toDbFormat(recipe);
+    db.runSync(
+      `UPDATE recipes SET ingredients = ? WHERE title = ? AND (ingredients = '' OR ingredients IS NULL);`,
+      [r.ingredients, r.title]
+    );
+    if (r.steps) {
+      db.runSync(
+        `UPDATE recipes SET steps = ?, cook_time = ? WHERE title = ? AND (steps = '' OR steps IS NULL);`,
+        [r.steps, r.cook_time, r.title]
+      );
+    }
+  }
+}
+
 // ─── Recettes ─────────────────────────────────────────────────
+
+import { parseImportJson, type ImportResult } from './data/importRecipes';
+import type { Recipe } from './types';
+
+export function importRecipes(json: string): ImportResult {
+  const { recipes, errors } = parseImportJson(json);
+  for (const recipe of recipes) {
+    const r = toDbFormat(recipe);
+    db.runSync(
+      'INSERT INTO recipes (title, category, prep_time, cook_time, description, ingredients, steps) VALUES (?, ?, ?, ?, ?, ?, ?);',
+      [r.title, r.category, r.prep_time, r.cook_time, r.description, r.ingredients, r.steps]
+    );
+  }
+  return { imported: recipes.length, errors };
+}
 
 export function getAllRecipes(): Recipe[] {
   return db.getAllSync<Recipe>('SELECT * FROM recipes ORDER BY title ASC;');
@@ -155,8 +111,8 @@ export function getRecipeById(id: number): Recipe | null {
 
 export function addRecipe(recipe: Omit<Recipe, 'id'>): void {
   db.runSync(
-    'INSERT INTO recipes (title, category, prep_time, description, ingredients) VALUES (?, ?, ?, ?, ?);',
-    [recipe.title, recipe.category, recipe.prep_time, recipe.description, recipe.ingredients]
+    'INSERT INTO recipes (title, category, prep_time, cook_time, description, ingredients, steps) VALUES (?, ?, ?, ?, ?, ?, ?);',
+    [recipe.title, recipe.category, recipe.prep_time, recipe.cook_time ?? 0, recipe.description, recipe.ingredients, recipe.steps ?? '']
   );
 }
 
@@ -165,6 +121,8 @@ export function deleteRecipe(id: number): void {
 }
 
 // ─── Meal Plan ────────────────────────────────────────────────
+
+import type { MealPlan, MealSlot } from './types';
 
 export function getMealPlan(date: string): MealPlan {
   const row = db.getFirstSync<{ lunch_id: number | null; dinner_id: number | null }>(
@@ -183,6 +141,8 @@ export function setMeal(date: string, slot: MealSlot, recipeId: number | null): 
 }
 
 // ─── Liste de courses ─────────────────────────────────────────
+
+import type { ShoppingItem } from './types';
 
 export function getShoppingList(): ShoppingItem[] {
   return db.getAllSync<ShoppingItem>('SELECT * FROM shopping_list ORDER BY recipe_name ASC, id ASC;');
@@ -203,4 +163,14 @@ export function toggleShoppingItem(id: number): void {
 
 export function clearShoppingList(): void {
   db.runSync('DELETE FROM shopping_list;');
+}
+
+export function deleteShoppingItemsByIds(ids: number[]): void {
+  if (ids.length === 0) return;
+  const placeholders = ids.map(() => '?').join(',');
+  db.runSync(`DELETE FROM shopping_list WHERE id IN (${placeholders});`, ids);
+}
+
+export function updateShoppingItemName(id: number, name: string): void {
+  db.runSync('UPDATE shopping_list SET name = ? WHERE id = ?;', [name, id]);
 }

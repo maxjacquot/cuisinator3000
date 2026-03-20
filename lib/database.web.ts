@@ -1,88 +1,54 @@
-export type Recipe = {
-  id: number;
-  title: string;
-  category: string;
-  prep_time: number;
-  description: string;
-  ingredients: string; // un ingrédient par ligne
-};
+import { SEED_RECIPES, toDbFormat } from './data/recipes';
+import { parseImportJson, type ImportResult } from './data/importRecipes';
 
-export type ShoppingItem = {
-  id: number;
-  name: string;
-  recipe_name: string;
-  done: number; // 0 | 1
-};
+export type { ImportResult };
 
-export type MealSlot = 'lunch' | 'dinner';
+// ─── Re-exports des types ──────────────────────────────────────
+export type { StepType, RecipeStep, Recipe, ShoppingItem, MealSlot, MealPlan } from './types';
 
-export type MealPlan = {
-  date: string;
-  lunch: number | null;
-  dinner: number | null;
-};
+// ─── Init ─────────────────────────────────────────────────────
+
+import type { Recipe, ShoppingItem, MealPlan, MealSlot } from './types';
+
+const STORAGE_KEY = 'cuisinator_recipes';
+const MEAL_PLANS_KEY = 'cuisinator_meal_plans';
+const SHOPPING_KEY = 'cuisinator_shopping';
+
+export function initDatabase() {
+  const existing = loadRecipes();
+  if (existing.length === 0) {
+    const seeded = SEED_RECIPES.map((r, i) => ({ ...toDbFormat(r), id: i + 1 }));
+    saveRecipes(seeded);
+  } else {
+    // Migrer les recettes existantes sans ingrédients/steps
+    const updated = existing.map((r) => {
+      const seed = SEED_RECIPES.find((s) => s.title === r.title);
+      if (!seed) return r;
+      const seedDb = toDbFormat(seed);
+      return {
+        ...r,
+        ingredients: r.ingredients || seedDb.ingredients,
+        steps: r.steps || seedDb.steps,
+        cook_time: r.cook_time || seedDb.cook_time,
+      };
+    });
+    saveRecipes(updated);
+  }
+}
 
 // ─── Recettes ─────────────────────────────────────────────────
 
-const STORAGE_KEY = 'cuisinator_recipes';
-
-const SEED_RECIPES: Omit<Recipe, 'id'>[] = [
-  {
-    title: 'Pâtes carbonara',
-    category: 'Plat',
-    prep_time: 20,
-    description: 'Des pâtes crémeuses à la guanciale, oeufs et pecorino.',
-    ingredients: 'Pâtes (400g)\nGuanciale (150g)\n4 jaunes d\'œufs\nPecorino romano\nPoivre noir\nSel',
-  },
-  {
-    title: 'Tarte aux pommes',
-    category: 'Dessert',
-    prep_time: 60,
-    description: 'Une tarte maison avec une pâte brisée et des pommes caramélisées.',
-    ingredients: 'Farine (250g)\nBeurre (125g)\nSucre (80g)\n4 pommes\n1 œuf\nSel\nCanelle',
-  },
-  {
-    title: 'Soupe à l\'oignon',
-    category: 'Entrée',
-    prep_time: 45,
-    description: 'La classique soupe à l\'oignon gratinée au gruyère.',
-    ingredients: '4 oignons\nBouillon de bœuf (1L)\nBeurre (30g)\nFarine (1 c.s.)\nGruyère râpé\nBaguette\nVin blanc sec\nThym',
-  },
-  {
-    title: 'Poulet rôti',
-    category: 'Plat',
-    prep_time: 90,
-    description: 'Poulet entier rôti avec herbes de provence, ail et beurre.',
-    ingredients: '1 poulet entier\nBeurre (50g)\n4 gousses d\'ail\nHerbes de Provence\nSel\nPoivre\nHuile d\'olive',
-  },
-  {
-    title: 'Salade niçoise',
-    category: 'Entrée',
-    prep_time: 15,
-    description: 'Salade fraîche avec thon, œufs durs, tomates et olives.',
-    ingredients: 'Thon en boîte\n4 œufs\nTomates cerises\nOlives noires\nSalade verte\nHaricots verts\nAnchois\nVinaigre',
-  },
-  {
-    title: 'Crème brûlée',
-    category: 'Dessert',
-    prep_time: 40,
-    description: 'Crème vanillée avec une croûte de sucre caramélisé croustillante.',
-    ingredients: 'Crème liquide (500ml)\n6 jaunes d\'œufs\nSucre (100g)\n1 gousse de vanille\nCassonade',
-  },
-];
-
-function load(): Recipe[] {
+function loadRecipes(): Recipe[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const items: Recipe[] = raw ? JSON.parse(raw) : [];
-    // Migration : ajoute ingredients si absent
-    return items.map((r) => ({ ingredients: '', ...r }));
+    return items.map((r) => ({ cook_time: 0, steps: '', ingredients: '', ...r }));
   } catch {
     return [];
   }
 }
 
-function save(recipes: Recipe[]) {
+function saveRecipes(recipes: Recipe[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(recipes));
 }
 
@@ -90,52 +56,37 @@ function nextId(recipes: Recipe[]): number {
   return recipes.length === 0 ? 1 : Math.max(...recipes.map((r) => r.id)) + 1;
 }
 
-const INGREDIENT_MAP: Record<string, string> = {
-  'Pâtes carbonara': 'Pâtes (400g)\nGuanciale (150g)\n4 jaunes d\'œufs\nPecorino romano\nPoivre noir\nSel',
-  'Tarte aux pommes': 'Farine (250g)\nBeurre (125g)\nSucre (80g)\n4 pommes\n1 œuf\nSel\nCanelle',
-  'Soupe à l\'oignon': '4 oignons\nBouillon de bœuf (1L)\nBeurre (30g)\nFarine (1 c.s.)\nGruyère râpé\nBaguette\nVin blanc sec\nThym',
-  'Poulet rôti': '1 poulet entier\nBeurre (50g)\n4 gousses d\'ail\nHerbes de Provence\nSel\nPoivre\nHuile d\'olive',
-  'Salade niçoise': 'Thon en boîte\n4 œufs\nTomates cerises\nOlives noires\nSalade verte\nHaricots verts\nAnchois\nVinaigre',
-  'Crème brûlée': 'Crème liquide (500ml)\n6 jaunes d\'œufs\nSucre (100g)\n1 gousse de vanille\nCassonade',
-};
-
-export function initDatabase() {
-  const existing = load();
-  if (existing.length === 0) {
-    const seeded = SEED_RECIPES.map((r, i) => ({ ...r, id: i + 1 }));
-    save(seeded);
-  } else {
-    // Migration : remplit les ingrédients manquants
-    const updated = existing.map((r) =>
-      !r.ingredients && INGREDIENT_MAP[r.title]
-        ? { ...r, ingredients: INGREDIENT_MAP[r.title] }
-        : r
-    );
-    save(updated);
+export function importRecipes(json: string): ImportResult {
+  const { recipes, errors } = parseImportJson(json);
+  const current = loadRecipes();
+  for (const recipe of recipes) {
+    const r = toDbFormat(recipe);
+    current.push({ ...r, id: nextId(current) });
   }
+  saveRecipes(current);
+  return { imported: recipes.length, errors };
 }
 
 export function getAllRecipes(): Recipe[] {
-  return load().sort((a, b) => a.title.localeCompare(b.title));
+  return loadRecipes().sort((a, b) => a.title.localeCompare(b.title));
 }
 
 export function getRecipeById(id: number): Recipe | null {
-  return load().find((r) => r.id === id) ?? null;
+  return loadRecipes().find((r) => r.id === id) ?? null;
 }
 
 export function addRecipe(recipe: Omit<Recipe, 'id'>): void {
-  const recipes = load();
-  recipes.push({ ...recipe, id: nextId(recipes) });
-  save(recipes);
+  const recipes = loadRecipes();
+  recipes.push({ cook_time: 0, steps: '', ...recipe, id: nextId(recipes) });
+  saveRecipes(recipes);
 }
 
 export function deleteRecipe(id: number): void {
-  save(load().filter((r) => r.id !== id));
+  saveRecipes(loadRecipes().filter((r) => r.id !== id));
 }
 
 // ─── Meal Plan ────────────────────────────────────────────────
 
-const MEAL_PLANS_KEY = 'cuisinator_meal_plans';
 type MealPlansStore = Record<string, { lunch: number | null; dinner: number | null }>;
 
 function loadMealPlans(): MealPlansStore {
@@ -165,8 +116,6 @@ export function setMeal(date: string, slot: MealSlot, recipeId: number | null): 
 }
 
 // ─── Liste de courses ─────────────────────────────────────────
-
-const SHOPPING_KEY = 'cuisinator_shopping';
 
 function loadShopping(): ShoppingItem[] {
   try {
@@ -198,12 +147,27 @@ export function addToShoppingList(items: { name: string; recipe_name: string }[]
 }
 
 export function toggleShoppingItem(id: number): void {
-  const items = loadShopping().map((item) =>
-    item.id === id ? { ...item, done: item.done === 1 ? 0 : 1 } : item
+  saveShopping(
+    loadShopping().map((item) =>
+      item.id === id ? { ...item, done: item.done === 1 ? 0 : 1 } : item
+    )
   );
-  saveShopping(items);
 }
 
 export function clearShoppingList(): void {
   saveShopping([]);
+}
+
+export function deleteShoppingItemsByIds(ids: number[]): void {
+  if (ids.length === 0) return;
+  const idSet = new Set(ids);
+  saveShopping(loadShopping().filter((item) => !idSet.has(item.id)));
+}
+
+export function updateShoppingItemName(id: number, name: string): void {
+  saveShopping(
+    loadShopping().map((item) =>
+      item.id === id ? { ...item, name } : item
+    )
+  );
 }

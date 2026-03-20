@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,16 +7,16 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect, Stack } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   getShoppingList,
   toggleShoppingItem,
   clearShoppingList,
   deleteShoppingItemsByIds,
-} from '../../lib/database';
-import type { ShoppingItem } from '../../lib/database';
-import { colors, typography, spacing, radii, shadows } from '../../lib/theme';
-import { TabBar } from '../../lib/TabBar';
+} from '../database';
+import type { ShoppingItem } from '../database';
+import { colors, typography, spacing, radii, shadows } from '../theme';
+import { useAppAlert } from '../AppAlert';
 
 // ─── Rayons supermarché ───────────────────────────────────────
 
@@ -67,7 +67,7 @@ function getRayonEmoji(label: string): string {
   return RAYONS.find((r) => r.label === label)?.emoji ?? RAYON_AUTRE.emoji;
 }
 
-// ─── Groupement générique ─────────────────────────────────────
+// ─── Groupement ───────────────────────────────────────────────
 
 type Group = { title: string; emoji: string; items: ShoppingItem[] };
 
@@ -88,7 +88,6 @@ function groupByRayon(items: ShoppingItem[]): Group[] {
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(item);
   }
-  // Ordre fixe des rayons + Autres en dernier
   const ordered: Group[] = [];
   for (const rayon of RAYONS) {
     if (map.has(rayon.label)) {
@@ -101,165 +100,176 @@ function groupByRayon(items: ShoppingItem[]): Group[] {
   return ordered;
 }
 
-// ─── Écran Courses ────────────────────────────────────────────
+// ─── Panneau Courses ──────────────────────────────────────────
 
 type ViewMode = 'recette' | 'rayon';
 
-export default function CoursesScreen() {
+interface CoursesPanelProps {
+  width: number;
+  isFocused: boolean;
+  focusKey: number;
+}
+
+export function CoursesPanel({ width, isFocused, focusKey }: CoursesPanelProps) {
+  const insets = useSafeAreaInsets();
   const [items, setItems] = useState<ShoppingItem[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('recette');
+  const { showAlert, AlertComponent } = useAppAlert();
 
-  const loadData = useCallback(() => {
-    setItems(getShoppingList());
-  }, []);
-
-  useFocusEffect(loadData);
+  useEffect(() => {
+    if (isFocused) setItems(getShoppingList());
+  }, [isFocused, focusKey]);
 
   function handleToggle(id: number) {
     toggleShoppingItem(id);
-    loadData();
+    setItems(getShoppingList());
   }
 
   function handleClearAll() {
-    clearShoppingList();
-    loadData();
+    showAlert({
+      title: 'Vider la liste ?',
+      message: 'Tous les articles de ta liste de courses vont être supprimés.',
+      buttons: [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Vider la liste',
+          style: 'destructive',
+          onPress: () => {
+            clearShoppingList();
+            setItems([]);
+          },
+        },
+      ],
+    });
   }
 
   function handleDeleteGroup(groupItems: ShoppingItem[]) {
     deleteShoppingItemsByIds(groupItems.map((i) => i.id));
-    loadData();
+    setItems(getShoppingList());
   }
 
   const groups = viewMode === 'recette' ? groupByRecipe(items) : groupByRayon(items);
   const doneCount = items.filter((i) => i.done === 1).length;
 
   return (
-    <>
-      <Stack.Screen options={{ headerShown: false }} />
-      <View style={styles.root}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerTop}>
-            <View>
-              <Text style={styles.headerTitle}>🛒 Courses</Text>
-              {items.length > 0 && (
-                <Text style={styles.headerSub}>{doneCount}/{items.length} dans le panier</Text>
-              )}
-            </View>
+    <View style={[s.root, { width }]} pointerEvents={isFocused ? 'auto' : 'none'}>
+      {/* Header */}
+      <View style={[s.header, { paddingTop: insets.top + spacing.xl }]}>
+        <View style={s.headerTop}>
+          <View>
+            <Text style={s.headerTitle}>🛒 Courses</Text>
             {items.length > 0 && (
-              <TouchableOpacity style={styles.clearBtn} onPress={handleClearAll} activeOpacity={0.7}>
-                <Text style={styles.clearBtnText}>J'ai fait les courses</Text>
-              </TouchableOpacity>
+              <Text style={s.headerSub}>{doneCount}/{items.length} dans le panier</Text>
             )}
           </View>
-
-          {/* Toggle vue */}
           {items.length > 0 && (
-            <View style={styles.toggle}>
-              <TouchableOpacity
-                style={[styles.toggleBtn, viewMode === 'recette' && styles.toggleBtnActive]}
-                onPress={() => setViewMode('recette')}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.toggleText, viewMode === 'recette' && styles.toggleTextActive]}>
-                  Par recette
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.toggleBtn, viewMode === 'rayon' && styles.toggleBtnActive]}
-                onPress={() => setViewMode('rayon')}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.toggleText, viewMode === 'rayon' && styles.toggleTextActive]}>
-                  Par rayon
-                </Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity style={s.clearBtn} onPress={handleClearAll} activeOpacity={0.7}>
+              <Text style={s.clearBtnText}>✓ J'ai fait les courses</Text>
+            </TouchableOpacity>
           )}
         </View>
 
-        {/* Liste */}
-        {items.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>🛍️</Text>
-            <Text style={styles.emptyTitle}>Liste vide</Text>
-            <Text style={styles.emptySub}>
-              Ouvre une recette et appuie sur{'\n'}"Ajouter aux courses"
-            </Text>
+        {items.length > 0 && (
+          <View style={s.toggle}>
+            <TouchableOpacity
+              style={[s.toggleBtn, viewMode === 'recette' && s.toggleBtnActive]}
+              onPress={() => setViewMode('recette')}
+              activeOpacity={0.8}
+            >
+              <Text style={[s.toggleText, viewMode === 'recette' && s.toggleTextActive]}>
+                Par recette
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.toggleBtn, viewMode === 'rayon' && s.toggleBtnActive]}
+              onPress={() => setViewMode('rayon')}
+              activeOpacity={0.8}
+            >
+              <Text style={[s.toggleText, viewMode === 'rayon' && s.toggleTextActive]}>
+                Par rayon
+              </Text>
+            </TouchableOpacity>
           </View>
-        ) : (
-          <FlatList
-            data={groups}
-            keyExtractor={(group) => group.title}
-            contentContainerStyle={styles.list}
-            showsVerticalScrollIndicator={false}
-            renderItem={({ item: group }) => {
-              const allDone = group.items.every((i) => i.done === 1);
-              return (
-              <View style={[styles.group, allDone && styles.groupDone]}>
-                <View style={styles.groupHeader}>
-                  <Text style={styles.groupEmoji}>{group.emoji}</Text>
-                  <Text style={styles.groupTitle}>{group.title}</Text>
+        )}
+      </View>
+
+      {/* Liste */}
+      {items.length === 0 ? (
+        <View style={s.emptyState}>
+          <Text style={s.emptyIcon}>🛍️</Text>
+          <Text style={s.emptyTitle}>Liste vide</Text>
+          <Text style={s.emptySub}>
+            Ouvre une recette et appuie sur{'\n'}"Ajouter au planning"
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={groups}
+          keyExtractor={(group) => group.title}
+          contentContainerStyle={s.list}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item: group }) => {
+            const allDone = group.items.every((i) => i.done === 1);
+            return (
+              <View style={[s.group, allDone && s.groupDone]}>
+                <View style={s.groupHeader}>
+                  <Text style={s.groupEmoji}>{group.emoji}</Text>
+                  <Text style={s.groupTitle}>{group.title}</Text>
                   {allDone ? (
                     <TouchableOpacity
-                      style={styles.groupDeleteBtn}
+                      style={s.groupDeleteBtn}
                       onPress={() => handleDeleteGroup(group.items)}
                       activeOpacity={0.7}
                     >
                       <Ionicons name="trash-outline" size={14} color="#DC2626" />
-                      <Text style={styles.groupDeleteText}>Supprimer</Text>
+                      <Text style={s.groupDeleteText}>Supprimer</Text>
                     </TouchableOpacity>
                   ) : (
-                    <Text style={styles.groupCount}>{group.items.length}</Text>
+                    <Text style={s.groupCount}>{group.items.length}</Text>
                   )}
                 </View>
 
-                <View style={styles.groupItems}>
+                <View style={s.groupItems}>
                   {group.items.map((item) => (
                     <TouchableOpacity
                       key={item.id}
-                      style={styles.item}
+                      style={s.item}
                       onPress={() => handleToggle(item.id)}
                       activeOpacity={0.7}
                     >
-                      <View style={[styles.checkbox, item.done === 1 && styles.checkboxDone]}>
-                        {item.done === 1 && <Text style={styles.checkmark}>✓</Text>}
+                      <View style={[s.checkbox, item.done === 1 && s.checkboxDone]}>
+                        {item.done === 1 && <Text style={s.checkmark}>✓</Text>}
                       </View>
-                      <View style={styles.itemBody}>
-                        <Text style={[styles.itemName, item.done === 1 && styles.itemNameDone]}>
+                      <View style={s.itemBody}>
+                        <Text style={[s.itemName, item.done === 1 && s.itemNameDone]}>
                           {item.name}
                         </Text>
                         {viewMode === 'rayon' && item.recipe_name ? (
-                          <Text style={styles.itemRecipe}>{item.recipe_name}</Text>
+                          <Text style={s.itemRecipe}>{item.recipe_name}</Text>
                         ) : null}
                       </View>
                     </TouchableOpacity>
                   ))}
                 </View>
               </View>
-              );
-            }}
-          />
-        )}
-
-        <TabBar />
-      </View>
-    </>
+            );
+          }}
+        />
+      )}
+      {AlertComponent}
+    </View>
   );
 }
 
 // ─── Styles ───────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.background,
   },
-
-  // Header
   header: {
     backgroundColor: colors.dark,
-    paddingTop: spacing.xxxxl,
     paddingBottom: spacing.lg,
     paddingHorizontal: spacing.xl,
     gap: spacing.lg,
@@ -280,7 +290,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   clearBtn: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: '#E8F5E9',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radii.full,
@@ -288,27 +298,8 @@ const styles = StyleSheet.create({
   clearBtnText: {
     fontSize: typography.fontSizes.sm,
     fontWeight: typography.fontWeights.semiBold,
-    color: '#DC2626',
+    color: '#2E7D32',
   },
-  groupDone: {
-    opacity: 0.75,
-  },
-  groupDeleteBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#FEE2E2',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: radii.full,
-  },
-  groupDeleteText: {
-    fontSize: typography.fontSizes.xs,
-    fontWeight: typography.fontWeights.bold,
-    color: '#DC2626',
-  },
-
-  // Toggle
   toggle: {
     flexDirection: 'row',
     backgroundColor: 'rgba(255,255,255,0.08)',
@@ -321,32 +312,25 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     alignItems: 'center',
   },
-  toggleBtnActive: {
-    backgroundColor: colors.primary,
-  },
+  toggleBtnActive: { backgroundColor: colors.primary },
   toggleText: {
     fontSize: typography.fontSizes.sm,
     fontWeight: typography.fontWeights.semiBold,
     color: colors.textSecondary,
   },
-  toggleTextActive: {
-    color: colors.surface,
-  },
-
-  // Liste
+  toggleTextActive: { color: colors.surface },
   list: {
     padding: spacing.lg,
     gap: spacing.lg,
     paddingBottom: spacing.xxxxl,
   },
-
-  // Groupe
   group: {
     backgroundColor: colors.surface,
     borderRadius: radii.lg,
     overflow: 'hidden',
     ...shadows.md,
   },
+  groupDone: { opacity: 0.75 },
   groupHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -357,9 +341,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  groupEmoji: {
-    fontSize: 16,
-  },
+  groupEmoji: { fontSize: 16 },
   groupTitle: {
     flex: 1,
     fontSize: typography.fontSizes.sm,
@@ -378,11 +360,21 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     overflow: 'hidden',
   },
-  groupItems: {
-    paddingVertical: spacing.xs,
+  groupDeleteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radii.full,
   },
-
-  // Item
+  groupDeleteText: {
+    fontSize: typography.fontSizes.xs,
+    fontWeight: typography.fontWeights.bold,
+    color: '#DC2626',
+  },
+  groupItems: { paddingVertical: spacing.xs },
   item: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -409,9 +401,7 @@ const styles = StyleSheet.create({
     color: colors.surface,
     fontWeight: typography.fontWeights.bold,
   },
-  itemBody: {
-    flex: 1,
-  },
+  itemBody: { flex: 1 },
   itemName: {
     fontSize: typography.fontSizes.md,
     color: colors.textPrimary,
@@ -425,8 +415,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 1,
   },
-
-  // État vide
   emptyState: {
     flex: 1,
     alignItems: 'center',
@@ -434,9 +422,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingBottom: spacing.xxxxl,
   },
-  emptyIcon: {
-    fontSize: 56,
-  },
+  emptyIcon: { fontSize: 56 },
   emptyTitle: {
     fontSize: typography.fontSizes.xl,
     fontWeight: typography.fontWeights.bold,

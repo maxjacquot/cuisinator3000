@@ -5,21 +5,222 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   Modal,
   FlatList,
   SafeAreaView,
-  // Alert gardé pour la modale ingrédients
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import {
   getRecipeById,
   deleteRecipe,
   addToShoppingList,
+  updateShoppingItemName,
   getShoppingList,
   type Recipe,
+  type RecipeStep,
 } from '../../lib/database';
 import { colors, typography, spacing, radii, shadows } from '../../lib/theme';
+import { useAppAlert } from '../../lib/AppAlert';
+import { PlanningModal } from '../../lib/PlanningModal';
+
+// ─── Helpers ingrédients ──────────────────────────────────────
+
+export type IngredientLine = {
+  id: number;
+  original: string;
+  qty: number | null;  // null = pas de quantité détectée
+  suffix: string;      // tout ce qui suit le nombre ("g de farine", " œufs", …)
+  currentQty: number;  // quantité ajustée par l'utilisateur
+  included: boolean;   // pour les lignes sans quantité
+};
+
+function parseIngredients(lines: string[], factor: number): IngredientLine[] {
+  return lines.map((line, id) => {
+    const match = line.match(/^(\d+(?:[.,]\d+)?)(.*)/);
+    if (!match) {
+      return { id, original: line, qty: null, suffix: line, currentQty: 0, included: true };
+    }
+    const qty = parseFloat(match[1].replace(',', '.'));
+    return { id, original: line, qty, suffix: match[2], currentQty: qty * factor, included: true };
+  });
+}
+
+function formatQty(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ',');
+}
+
+function reconstructLine(line: IngredientLine): string {
+  if (line.qty === null) return line.original;
+  return formatQty(line.currentQty) + line.suffix;
+}
+
+function getStep(qty: number): number {
+  if (!Number.isInteger(qty)) return 0.5;
+  if (qty >= 500) return 50;
+  if (qty >= 100) return 10;
+  return 1;
+}
+
+// Clé de comparaison : la partie non-numérique de l'ingrédient (ex: " œufs", "g de farine")
+function ingredientBaseKey(name: string): string {
+  const match = name.match(/^(\d+(?:[.,]\d+)?)(.*)/);
+  return (match ? match[2] : name).toLowerCase().trim();
+}
+
+// Additionne les quantités de deux chaînes ingrédient ayant la même clé de base
+function sumIngredientNames(existing: string, adding: string): string {
+  const parse = (s: string) => {
+    const m = s.match(/^(\d+(?:[.,]\d+)?)(.*)/);
+    return m ? { qty: parseFloat(m[1].replace(',', '.')), suffix: m[2] } : null;
+  };
+  const e = parse(existing);
+  const a = parse(adding);
+  if (!e || !a) return existing;
+  const total = e.qty + a.qty;
+  const formatted = Number.isInteger(total) ? String(total) : total.toFixed(1).replace('.', ',');
+  return formatted + e.suffix;
+}
+
+// ─── Modale ajustement ingrédients ───────────────────────────
+
+interface IngredientsAdjustModalProps {
+  visible: boolean;
+  recipe: Recipe;
+  lines: IngredientLine[];
+  totalSlots: number;
+  onClose: () => void;
+  onAdd: (lines: IngredientLine[]) => void;
+  onLinesChange: (lines: IngredientLine[]) => void;
+}
+
+function IngredientsAdjustModal({
+  visible, recipe, lines, totalSlots, onClose, onAdd, onLinesChange,
+}: IngredientsAdjustModalProps) {
+  function adjustQty(id: number, delta: number) {
+    onLinesChange(lines.map((l) => {
+      if (l.id !== id || l.qty === null) return l;
+      const step = getStep(l.qty * totalSlots);
+      const next = Math.max(0, l.currentQty + delta * step);
+      return { ...l, currentQty: next };
+    }));
+  }
+
+  function toggleIncluded(id: number) {
+    onLinesChange(lines.map((l) =>
+      l.id === id ? { ...l, included: !l.included } : l
+    ));
+  }
+
+  const activeCount = lines.filter((l) =>
+    l.qty !== null ? l.currentQty > 0 : l.included
+  ).length;
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <SafeAreaView style={adjModal.root}>
+        {/* Header */}
+        <View style={adjModal.header}>
+          <View style={{ flex: 1 }}>
+            <Text style={adjModal.title}>Ingrédients à acheter</Text>
+            <Text style={adjModal.subtitle}>{recipe.title}</Text>
+          </View>
+          <TouchableOpacity onPress={onClose} style={adjModal.closeBtn}>
+            <Text style={adjModal.closeBtnText}>✕</Text>
+          </TouchableOpacity>
+        </View>
+
+        {totalSlots > 1 && (
+          <Text style={adjModal.hint}>
+            Quantités calculées pour {totalSlots} créneaux. Ajuste si tu en as déjà certains.
+          </Text>
+        )}
+        {totalSlots === 1 && (
+          <Text style={adjModal.hint}>Ajuste les quantités si tu en as déjà certains à la maison.</Text>
+        )}
+
+        {/* Liste */}
+        <FlatList
+          data={lines}
+          keyExtractor={(item) => String(item.id)}
+          contentContainerStyle={adjModal.list}
+          renderItem={({ item }) => {
+            const isZero = item.qty !== null ? item.currentQty === 0 : !item.included;
+
+            return (
+              <View style={[adjModal.row, isZero && adjModal.rowDisabled]}>
+                {/* Nom de l'ingrédient */}
+                <Text
+                  style={[adjModal.rowName, isZero && adjModal.rowNameDisabled]}
+                  numberOfLines={2}
+                >
+                  {item.qty !== null ? item.suffix.replace(/^\s*/, '') : item.original}
+                </Text>
+
+                {/* Stepper si quantité détectée */}
+                {item.qty !== null ? (
+                  <View style={adjModal.stepper}>
+                    <TouchableOpacity
+                      style={[adjModal.stepBtn, adjModal.stepBtnMinus]}
+                      onPress={() => adjustQty(item.id, -1)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={adjModal.stepBtnText}>−</Text>
+                    </TouchableOpacity>
+                    <View style={adjModal.stepValue}>
+                      <Text style={[adjModal.stepValueText, isZero && adjModal.stepValueZero]}>
+                        {formatQty(item.currentQty)}
+                        {/* Unité collée si présente (ex: "g", "ml") */}
+                        {item.suffix.match(/^([a-zA-Zg-ÿ]+)/) ? (
+                          <Text style={adjModal.stepUnit}>
+                            {item.suffix.match(/^([a-zA-Zg-ÿ]+)/)![1]}
+                          </Text>
+                        ) : null}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[adjModal.stepBtn, adjModal.stepBtnPlus]}
+                      onPress={() => adjustQty(item.id, 1)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={adjModal.stepBtnText}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  /* Toggle pour ingrédients sans quantité */
+                  <TouchableOpacity
+                    style={[adjModal.checkbox, item.included && adjModal.checkboxActive]}
+                    onPress={() => toggleIncluded(item.id)}
+                    activeOpacity={0.7}
+                  >
+                    {item.included && <Text style={adjModal.checkmark}>✓</Text>}
+                  </TouchableOpacity>
+                )}
+              </View>
+            );
+          }}
+        />
+
+        {/* Footer */}
+        <View style={adjModal.footer}>
+          <TouchableOpacity
+            style={[adjModal.addBtn, activeCount === 0 && adjModal.addBtnDisabled]}
+            onPress={() => onAdd(lines)}
+            disabled={activeCount === 0}
+            activeOpacity={0.85}
+          >
+            <Text style={adjModal.addBtnText}>
+              {activeCount === 0
+                ? 'Sélectionne au moins un ingrédient'
+                : `Ajouter ${activeCount} ingrédient${activeCount > 1 ? 's' : ''} aux courses`}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+// ─── Couleurs catégories ──────────────────────────────────────
 
 const CATEGORY_COLORS: Record<string, string> = {
   Entrée: '#4CAF50',
@@ -27,110 +228,78 @@ const CATEGORY_COLORS: Record<string, string> = {
   Dessert: '#9C27B0',
 };
 
-// ─── Modale sélection ingrédients ────────────────────────────
+// ─── Frise chronologique ──────────────────────────────────────
 
-interface IngredientsModalProps {
-  visible: boolean;
-  recipe: Recipe;
-  onClose: () => void;
-  onAdd: (selected: string[]) => void;
-}
+const STEP_CONFIG: Record<string, { emoji: string; color: string; bg: string; label: string }> = {
+  prep: { emoji: '🔪', color: '#FF6B35', bg: '#FFF0EA', label: 'Préparation' },
+  cook: { emoji: '🔥', color: '#E53E3E', bg: '#FFF5F5', label: 'Cuisson' },
+  wait: { emoji: '❄️', color: '#805AD5', bg: '#FAF5FF', label: 'Frigo' },
+  rest: { emoji: '⏸️', color: '#38A169', bg: '#F0FFF4', label: 'Repos' },
+};
 
-function IngredientsModal({ visible, recipe, onClose, onAdd }: IngredientsModalProps) {
-  const allIngredients = recipe.ingredients
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  // Tous cochés par défaut (true = à ajouter)
-  const [checked, setChecked] = useState<Record<number, boolean>>({});
-  const [existingCounts, setExistingCounts] = useState<Record<string, number>>({});
-
-  useEffect(() => {
-    const initial: Record<number, boolean> = {};
-    allIngredients.forEach((_, i) => { initial[i] = true; });
-    setChecked(initial);
-
-    // Compte combien de fois chaque ingrédient est déjà dans la liste
-    const list = getShoppingList();
-    const counts: Record<string, number> = {};
-    for (const item of list) {
-      const key = item.name.toLowerCase().trim();
-      counts[key] = (counts[key] ?? 0) + 1;
-    }
-    setExistingCounts(counts);
-  }, [recipe.id]);
-
-  function toggle(index: number) {
-    setChecked((prev) => ({ ...prev, [index]: !prev[index] }));
-  }
-
-  function handleAdd() {
-    const selected = allIngredients.filter((_, i) => checked[i]);
-    if (selected.length === 0) {
-      Alert.alert('Aucun ingrédient sélectionné');
-      return;
-    }
-    onAdd(selected);
-  }
-
-  const selectedCount = allIngredients.filter((_, i) => checked[i]).length;
+function RecipeTimeline({ steps }: { steps: RecipeStep[] }) {
+  const total = steps.reduce((acc, s) => acc + s.duration, 0);
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <SafeAreaView style={modal.root}>
-        {/* Header */}
-        <View style={modal.header}>
-          <View>
-            <Text style={modal.title}>Ajouter aux courses</Text>
-            <Text style={modal.subtitle}>{recipe.title}</Text>
+    <View style={timeline.wrap}>
+      {/* En-tête */}
+      <View style={timeline.header}>
+        <Text style={timeline.sectionLabel}>Étapes</Text>
+        <View style={timeline.totalBadge}>
+          <Text style={timeline.totalBadgeText}>⏱ {total} min au total</Text>
+        </View>
+      </View>
+
+      {/* Légende des types */}
+      <View style={timeline.legend}>
+        {Object.entries(STEP_CONFIG).map(([key, cfg]) => (
+          <View key={key} style={[timeline.legendItem, { backgroundColor: cfg.bg }]}>
+            <Text style={timeline.legendEmoji}>{cfg.emoji}</Text>
+            <Text style={[timeline.legendLabel, { color: cfg.color }]}>{cfg.label}</Text>
           </View>
-          <TouchableOpacity onPress={onClose} style={modal.closeBtn}>
-            <Text style={modal.closeBtnText}>✕</Text>
-          </TouchableOpacity>
-        </View>
+        ))}
+      </View>
 
-        <Text style={modal.hint}>Décochez les ingrédients que vous avez déjà.</Text>
+      {/* Étapes */}
+      <View style={timeline.steps}>
+        {steps.map((step, index) => {
+          const cfg = STEP_CONFIG[step.type] ?? STEP_CONFIG.prep;
+          const isLast = index === steps.length - 1;
+          const widthPct = Math.max(15, Math.round((step.duration / total) * 100));
 
-        {/* Liste ingrédients */}
-        <FlatList
-          data={allIngredients}
-          keyExtractor={(_, i) => String(i)}
-          contentContainerStyle={modal.list}
-          renderItem={({ item, index }) => {
-            const count = existingCounts[item.toLowerCase().trim()] ?? 0;
-            return (
-              <TouchableOpacity
-                style={modal.item}
-                onPress={() => toggle(index)}
-                activeOpacity={0.7}
-              >
-                <View style={[modal.checkbox, checked[index] && modal.checkboxActive]}>
-                  {checked[index] && <Text style={modal.checkmark}>✓</Text>}
+          return (
+            <View key={index} style={timeline.stepRow}>
+              {/* Ligne verticale + dot */}
+              <View style={timeline.dotCol}>
+                <View style={[timeline.dot, { backgroundColor: cfg.color }]}>
+                  <Text style={timeline.dotEmoji}>{cfg.emoji}</Text>
                 </View>
-                <Text style={[modal.itemText, !checked[index] && modal.itemTextOff]}>
-                  {item}
-                </Text>
-                {count > 0 && (
-                  <View style={modal.countBadge}>
-                    <Text style={modal.countBadgeText}>×{count}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          }}
-        />
+                {!isLast && <View style={[timeline.line, { backgroundColor: cfg.color + '40' }]} />}
+              </View>
 
-        {/* Bouton confirmer */}
-        <View style={modal.footer}>
-          <TouchableOpacity style={modal.addBtn} onPress={handleAdd} activeOpacity={0.85}>
-            <Text style={modal.addBtnText}>
-              Ajouter {selectedCount} ingrédient{selectedCount > 1 ? 's' : ''} à la liste
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    </Modal>
+              {/* Contenu */}
+              <View style={[timeline.stepCard, { borderLeftColor: cfg.color }]}>
+                <View style={timeline.stepCardTop}>
+                  <Text style={timeline.stepLabel}>{`Étape ${index + 1} — ${step.label}`}</Text>
+                  <View style={[timeline.durationBadge, { backgroundColor: cfg.bg }]}>
+                    <Text style={[timeline.durationText, { color: cfg.color }]}>
+                      {step.duration} min
+                    </Text>
+                  </View>
+                </View>
+                {step.instruction ? (
+                  <Text style={timeline.stepInstruction}>{step.instruction}</Text>
+                ) : null}
+                {/* Barre de durée proportionnelle */}
+                <View style={timeline.barTrack}>
+                  <View style={[timeline.barFill, { width: `${widthPct}%` as any, backgroundColor: cfg.color }]} />
+                </View>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    </View>
   );
 }
 
@@ -140,8 +309,13 @@ export default function RecipeScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const navigation = useNavigation();
+  const { showAlert, AlertComponent } = useAppAlert();
+
   const [recipe, setRecipe] = useState<Recipe | null>(null);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [planningModalVisible, setPlanningModalVisible] = useState(false);
+  const [adjustModalVisible, setAdjustModalVisible] = useState(false);
+  const [ingredientLines, setIngredientLines] = useState<IngredientLine[]>([]);
+  const [totalSlotsRef, setTotalSlotsRef] = useState(1);
 
   useEffect(() => {
     if (id) {
@@ -156,11 +330,51 @@ export default function RecipeScreen() {
     router.back();
   }
 
-  function handleAddToShopping(selected: string[]) {
+  function handlePlanningConfirm(newSlots: number) {
+    if (!recipe || newSlots === 0) return; // aucun nouveau créneau, pas d'ajout aux courses
+    const rawLines = recipe.ingredients
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    setTotalSlotsRef(newSlots);
+    setIngredientLines(parseIngredients(rawLines, newSlots));
+    setAdjustModalVisible(true);
+  }
+
+  function handleAddToShopping(lines: IngredientLine[]) {
     if (!recipe) return;
-    addToShoppingList(selected.map((name) => ({ name, recipe_name: recipe.title })));
-    setModalVisible(false);
-    Alert.alert('✓ Ajouté !', `${selected.length} ingrédient${selected.length > 1 ? 's' : ''} ajouté${selected.length > 1 ? 's' : ''} à ta liste de courses.`);
+
+    const active = lines.filter((l) =>
+      l.qty !== null ? l.currentQty > 0 : l.included
+    );
+
+    // Ingrédients déjà en liste pour cette recette (non cochés)
+    const existing = getShoppingList().filter(
+      (i) => i.recipe_name === recipe.title && i.done === 0
+    );
+
+    const toInsert: { name: string; recipe_name: string }[] = [];
+
+    for (const line of active) {
+      const newName = reconstructLine(line);
+      const baseKey = ingredientBaseKey(newName);
+      const match = existing.find((e) => ingredientBaseKey(e.name) === baseKey);
+
+      if (match) {
+        // Incrémente la quantité de la ligne existante
+        updateShoppingItemName(match.id, sumIngredientNames(match.name, newName));
+      } else {
+        toInsert.push({ name: newName, recipe_name: recipe.title });
+      }
+    }
+
+    if (toInsert.length > 0) addToShoppingList(toInsert);
+
+    setAdjustModalVisible(false);
+    showAlert({
+      title: 'Courses mises à jour !',
+      message: `${active.length} ingrédient${active.length > 1 ? 's' : ''} ajouté${active.length > 1 ? 's' : ''} à ta liste de courses.`,
+    });
   }
 
   if (!recipe) {
@@ -176,6 +390,14 @@ export default function RecipeScreen() {
     .map((s) => s.trim())
     .filter(Boolean);
 
+  let steps: RecipeStep[] = [];
+  try {
+    if (recipe.steps) steps = JSON.parse(recipe.steps);
+  } catch { /* ignore */ }
+
+  const hasCookTime = recipe.cook_time > 0;
+  const prepOnly = hasCookTime ? recipe.prep_time - recipe.cook_time : recipe.prep_time;
+
   return (
     <>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -184,9 +406,20 @@ export default function RecipeScreen() {
           <View style={[styles.categoryBadge, { backgroundColor: CATEGORY_COLORS[recipe.category] ?? '#888' }]}>
             <Text style={styles.categoryText}>{recipe.category}</Text>
           </View>
-          <View style={styles.timeBadge}>
-            <Text style={styles.timeText}>⏱ {recipe.prep_time} min</Text>
-          </View>
+          {hasCookTime ? (
+            <>
+              <View style={[styles.timeBadge, styles.timeBadgePrep]}>
+                <Text style={styles.timeText}>🔪 {prepOnly} min de prépa</Text>
+              </View>
+              <View style={[styles.timeBadge, styles.timeBadgeCook]}>
+                <Text style={[styles.timeText, { color: '#E53E3E' }]}>🔥 {recipe.cook_time} min de cuisson</Text>
+              </View>
+            </>
+          ) : (
+            <View style={styles.timeBadge}>
+              <Text style={styles.timeText}>⏱ {recipe.prep_time} min</Text>
+            </View>
+          )}
         </View>
 
         {/* Titre */}
@@ -196,6 +429,14 @@ export default function RecipeScreen() {
         {/* Description */}
         <Text style={styles.sectionLabel}>Description</Text>
         <Text style={styles.description}>{recipe.description}</Text>
+
+        {/* Frise des étapes */}
+        {steps.length > 0 && (
+          <>
+            <View style={styles.divider} />
+            <RecipeTimeline steps={steps} />
+          </>
+        )}
 
         {/* Ingrédients */}
         {ingredients.length > 0 && (
@@ -211,37 +452,52 @@ export default function RecipeScreen() {
               ))}
             </View>
 
-            {/* Bouton ajouter aux courses */}
+            {/* Bouton planning */}
             <TouchableOpacity
-              style={styles.shoppingBtn}
-              onPress={() => setModalVisible(true)}
+              style={styles.planningBtn}
+              onPress={() => setPlanningModalVisible(true)}
               activeOpacity={0.85}
             >
-              <Text style={styles.shoppingBtnText}>🛒  Ajouter aux courses</Text>
+              <Text style={styles.planningBtnText}>📅  Ajouter au planning</Text>
             </TouchableOpacity>
           </>
         )}
 
-        {/* Supprimer recette */}
+        {/* Supprimer */}
         <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
           <Text style={styles.deleteBtnText}>Supprimer la recette</Text>
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Modale ingrédients */}
-      {modalVisible && (
-        <IngredientsModal
-          visible={modalVisible}
+      {/* Modale planning */}
+      {planningModalVisible && (
+        <PlanningModal
+          visible={planningModalVisible}
           recipe={recipe}
-          onClose={() => setModalVisible(false)}
-          onAdd={handleAddToShopping}
+          onClose={() => setPlanningModalVisible(false)}
+          onConfirm={handlePlanningConfirm}
         />
       )}
+
+      {/* Modale ajustement ingrédients */}
+      {adjustModalVisible && (
+        <IngredientsAdjustModal
+          visible={adjustModalVisible}
+          recipe={recipe}
+          lines={ingredientLines}
+          totalSlots={totalSlotsRef}
+          onClose={() => setAdjustModalVisible(false)}
+          onAdd={handleAddToShopping}
+          onLinesChange={setIngredientLines}
+        />
+      )}
+
+      {AlertComponent}
     </>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────
+// ─── Styles recette ───────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
@@ -283,6 +539,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  timeBadgePrep: {
+    borderColor: '#FF6B35',
+    backgroundColor: '#FFF0EA',
+  },
+  timeBadgeCook: {
+    borderColor: '#E53E3E',
+    backgroundColor: '#FFF5F5',
   },
   timeText: {
     color: colors.textSecondary,
@@ -333,15 +597,15 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSizes.md,
     color: colors.textPrimary,
   },
-  shoppingBtn: {
+  planningBtn: {
     marginTop: spacing.xl,
-    backgroundColor: colors.dark,
+    backgroundColor: colors.primary,
     borderRadius: radii.lg,
     paddingVertical: spacing.lg,
     alignItems: 'center',
-    ...shadows.md,
+    ...shadows.primary,
   },
-  shoppingBtnText: {
+  planningBtnText: {
     color: colors.surface,
     fontSize: typography.fontSizes.md,
     fontWeight: typography.fontWeights.bold,
@@ -360,8 +624,127 @@ const styles = StyleSheet.create({
   },
 });
 
-// Styles modale
-const modal = StyleSheet.create({
+// ─── Styles frise chronologique ───────────────────────────────
+
+const timeline = StyleSheet.create({
+  wrap: { gap: spacing.lg },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sectionLabel: {
+    fontSize: typography.fontSizes.xs,
+    fontWeight: typography.fontWeights.bold,
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  totalBadge: {
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.full,
+  },
+  totalBadgeText: {
+    fontSize: typography.fontSizes.xs,
+    fontWeight: typography.fontWeights.bold,
+    color: colors.primary,
+  },
+  legend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radii.full,
+  },
+  legendEmoji: { fontSize: 11 },
+  legendLabel: {
+    fontSize: typography.fontSizes.xs,
+    fontWeight: typography.fontWeights.semiBold,
+  },
+  steps: { gap: 0 },
+  stepRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  dotCol: {
+    alignItems: 'center',
+    width: 36,
+  },
+  dot: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dotEmoji: { fontSize: 16 },
+  line: {
+    width: 2,
+    flex: 1,
+    minHeight: 16,
+    marginVertical: 2,
+  },
+  stepCard: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderLeftWidth: 3,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+    ...shadows.sm,
+  },
+  stepCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  stepLabel: {
+    flex: 1,
+    fontSize: typography.fontSizes.sm,
+    fontWeight: typography.fontWeights.bold,
+    color: colors.textPrimary,
+  },
+  stepInstruction: {
+    fontSize: typography.fontSizes.sm,
+    color: colors.textSecondary,
+    lineHeight: typography.lineHeights.normal,
+  },
+  durationBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radii.full,
+    flexShrink: 0,
+  },
+  durationText: {
+    fontSize: typography.fontSizes.xs,
+    fontWeight: typography.fontWeights.bold,
+  },
+  barTrack: {
+    height: 4,
+    backgroundColor: colors.border,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  barFill: {
+    height: 4,
+    borderRadius: 2,
+    opacity: 0.7,
+  },
+});
+
+// ─── Styles modale ajustement ingrédients ─────────────────────
+
+const adjModal = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.background,
@@ -407,40 +790,99 @@ const modal = StyleSheet.create({
   },
   list: {
     paddingHorizontal: spacing.lg,
-    gap: spacing.xs,
     paddingBottom: spacing.lg,
+    gap: spacing.sm,
   },
-  item: {
+
+  // Ligne ingrédient
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    padding: spacing.lg,
+    borderRadius: radii.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     gap: spacing.md,
     ...shadows.sm,
   },
-  itemText: {
+  rowDisabled: {
+    opacity: 0.45,
+  },
+  rowName: {
+    flex: 1,
     fontSize: typography.fontSizes.md,
     color: colors.textPrimary,
-    flex: 1,
+    fontWeight: typography.fontWeights.medium,
   },
-  itemTextOff: {
-    color: colors.textSecondary,
+  rowNameDisabled: {
     textDecorationLine: 'line-through',
+    color: colors.textSecondary,
   },
-  countBadge: {
-    backgroundColor: colors.primaryLight,
-    borderRadius: radii.full,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderWidth: 1,
-    borderColor: colors.primary + '55',
+
+  // Stepper
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
-  countBadgeText: {
-    fontSize: typography.fontSizes.xs,
+  stepBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepBtnMinus: {
+    backgroundColor: colors.border,
+  },
+  stepBtnPlus: {
+    backgroundColor: colors.primary,
+  },
+  stepBtnText: {
+    fontSize: 18,
     fontWeight: typography.fontWeights.bold,
-    color: colors.primary,
+    color: colors.textPrimary,
+    lineHeight: 20,
   },
+  stepValue: {
+    minWidth: 48,
+    alignItems: 'center',
+  },
+  stepValueText: {
+    fontSize: typography.fontSizes.md,
+    fontWeight: typography.fontWeights.extraBold,
+    color: colors.textPrimary,
+  },
+  stepValueZero: {
+    color: colors.textSecondary,
+  },
+  stepUnit: {
+    fontSize: typography.fontSizes.sm,
+    fontWeight: typography.fontWeights.medium,
+    color: colors.textSecondary,
+  },
+
+  // Checkbox (ingrédients sans quantité)
+  checkbox: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxActive: {
+    backgroundColor: colors.success,
+    borderColor: colors.success,
+  },
+  checkmark: {
+    fontSize: 13,
+    color: colors.surface,
+    fontWeight: typography.fontWeights.bold,
+  },
+
+  // Footer
   footer: {
     padding: spacing.xl,
     borderTopWidth: 1,
@@ -454,9 +896,15 @@ const modal = StyleSheet.create({
     alignItems: 'center',
     ...shadows.primary,
   },
+  addBtnDisabled: {
+    backgroundColor: colors.border,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   addBtnText: {
     color: colors.surface,
     fontSize: typography.fontSizes.md,
     fontWeight: typography.fontWeights.extraBold,
   },
 });
+
