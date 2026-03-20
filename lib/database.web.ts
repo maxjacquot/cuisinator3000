@@ -4,7 +4,7 @@ import { parseImportJson, type ImportResult } from './data/importRecipes';
 export type { ImportResult };
 
 // ─── Re-exports des types ──────────────────────────────────────
-export type { StepType, RecipeStep, Recipe, ShoppingItem, MealSlot, MealPlan } from './types';
+export type { StepType, RecipeStep, Recipe, Ingredient, ShoppingItem, MealSlot, MealPlan } from './types';
 
 // ─── Init ─────────────────────────────────────────────────────
 

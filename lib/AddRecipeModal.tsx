@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { addRecipe } from './database';
+import type { Ingredient } from './types';
 import { colors, typography, spacing, radii, shadows } from './theme';
 
 // ─── Constantes ───────────────────────────────────────────────
@@ -44,6 +45,14 @@ type StepDraft = {
   type: StepType;
 };
 
+type IngredientDraft = {
+  qty: string;
+  unit: string;
+  name: string;
+};
+
+const UNIT_SHORTCUTS = ['g', 'kg', 'ml', 'cl', 'L', 'unité', 'c. à café', 'c. à soupe', 'pincée'];
+
 type FormState = {
   title: string;
   category: Category;
@@ -51,7 +60,7 @@ type FormState = {
   prep_time: string;
   cook_time: string;
   tags: string[];
-  ingredients: string[];
+  ingredients: IngredientDraft[];
   steps: StepDraft[];
 };
 
@@ -63,7 +72,7 @@ function emptyForm(): FormState {
     prep_time: '',
     cook_time: '',
     tags: [],
-    ingredients: [''],
+    ingredients: [{ qty: '', unit: '', name: '' }],
     steps: [{ label: '', instruction: '', duration: '', type: 'prep' }],
   };
 }
@@ -129,14 +138,13 @@ export function AddRecipeModal({ visible, onClose, onAdded }: AddRecipeModalProp
 
   // ── Ingrédients ──
 
-  function setIngredient(index: number, value: string) {
-    const next = [...form.ingredients];
-    next[index] = value;
+  function setIngredient(index: number, patch: Partial<IngredientDraft>) {
+    const next = form.ingredients.map((ing, i) => i === index ? { ...ing, ...patch } : ing);
     setForm({ ...form, ingredients: next });
   }
 
   function addIngredient() {
-    setForm({ ...form, ingredients: [...form.ingredients, ''] });
+    setForm({ ...form, ingredients: [...form.ingredients, { qty: '', unit: '', name: '' }] });
   }
 
   function removeIngredient(index: number) {
@@ -188,7 +196,16 @@ export function AddRecipeModal({ visible, onClose, onAdded }: AddRecipeModalProp
     }
 
     const cookTime = form.cook_time.trim() ? parseInt(form.cook_time, 10) : 0;
-    const ingredients = form.ingredients.map((i) => i.trim()).filter(Boolean);
+    const ingredients: Ingredient[] = form.ingredients
+      .filter((i) => i.name.trim())
+      .map((i) => {
+        const qtyNum = i.qty.trim() ? parseFloat(i.qty.replace(',', '.')) : NaN;
+        return {
+          qty: !isNaN(qtyNum) ? qtyNum : null,
+          unit: i.unit.trim(),
+          name: i.name.trim(),
+        };
+      });
     const steps = form.steps
       .filter((s) => s.label.trim())
       .map((s) => ({
@@ -204,7 +221,7 @@ export function AddRecipeModal({ visible, onClose, onAdded }: AddRecipeModalProp
       prep_time: prepTime,
       cook_time: isNaN(cookTime) ? 0 : cookTime,
       description: form.description.trim(),
-      ingredients: ingredients.join('\n'),
+      ingredients: ingredients.length > 0 ? JSON.stringify(ingredients) : '[]',
       steps: steps.length > 0 ? JSON.stringify(steps) : '',
       tags: form.tags.length > 0 ? JSON.stringify(form.tags) : '[]',
     });
@@ -329,21 +346,50 @@ export function AddRecipeModal({ visible, onClose, onAdded }: AddRecipeModalProp
           <SectionLabel>Ingrédients</SectionLabel>
           <View style={s.listBlock}>
             {form.ingredients.map((ing, i) => (
-              <View key={i} style={s.listRow}>
-                <TextInput
-                  style={[s.input, s.listInput]}
-                  value={ing}
-                  onChangeText={(v) => setIngredient(i, v)}
-                  placeholder={`Ex : 200g de farine`}
-                  placeholderTextColor={colors.textSecondary}
-                />
-                <TouchableOpacity
-                  style={s.removeBtn}
-                  onPress={() => removeIngredient(i)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={s.removeBtnText}>✕</Text>
-                </TouchableOpacity>
+              <View key={i} style={s.ingBlock}>
+                <View style={s.ingRow}>
+                  <TextInput
+                    style={[s.input, s.ingQtyInput]}
+                    value={ing.qty}
+                    onChangeText={(v) => setIngredient(i, { qty: v })}
+                    placeholder="Qté"
+                    placeholderTextColor={colors.textSecondary}
+                    keyboardType="decimal-pad"
+                  />
+                  <TextInput
+                    style={[s.input, s.ingUnitInput]}
+                    value={ing.unit}
+                    onChangeText={(v) => setIngredient(i, { unit: v })}
+                    placeholder="Unité"
+                    placeholderTextColor={colors.textSecondary}
+                  />
+                  <TextInput
+                    style={[s.input, s.ingNameInput]}
+                    value={ing.name}
+                    onChangeText={(v) => setIngredient(i, { name: v })}
+                    placeholder="Ingrédient"
+                    placeholderTextColor={colors.textSecondary}
+                  />
+                  <TouchableOpacity
+                    style={s.removeBtn}
+                    onPress={() => removeIngredient(i)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={s.removeBtnText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={s.unitShortcuts}>
+                  {UNIT_SHORTCUTS.map((u) => (
+                    <TouchableOpacity
+                      key={u}
+                      style={[s.unitChip, ing.unit === u && s.unitChipActive]}
+                      onPress={() => setIngredient(i, { unit: u })}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[s.unitChipText, ing.unit === u && s.unitChipTextActive]}>{u}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </View>
             ))}
             <TouchableOpacity style={s.addRowBtn} onPress={addIngredient} activeOpacity={0.7}>
@@ -561,6 +607,41 @@ const s = StyleSheet.create({
     gap: spacing.sm,
   },
   listInput: { flex: 1 },
+  ingBlock: { gap: 6 },
+  ingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  ingQtyInput: { width: 56, textAlign: 'center' },
+  ingUnitInput: { width: 80 },
+  ingNameInput: { flex: 1 },
+  unitShortcuts: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    paddingLeft: 2,
+  },
+  unitChip: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radii.full,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  unitChipActive: {
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.primary,
+  },
+  unitChipText: {
+    fontSize: typography.fontSizes.xs,
+    color: colors.textSecondary,
+  },
+  unitChipTextActive: {
+    color: colors.primary,
+    fontWeight: typography.fontWeights.semiBold,
+  },
   removeBtn: {
     width: 32,
     height: 32,

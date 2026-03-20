@@ -1,5 +1,5 @@
 import type { SeedRecipe } from './recipes';
-import type { RecipeStep, StepType } from '../types';
+import type { RecipeStep, StepType, Ingredient } from '../types';
 
 export type ImportResult = {
   imported: number;
@@ -49,12 +49,20 @@ export function parseImportJson(json: string): { recipes: SeedRecipe[]; errors: 
       continue;
     }
 
-    // Ingrédients : accepte string[] ou string (séparé par \n)
-    const ingredients: string[] = Array.isArray(item.ingredients)
-      ? (item.ingredients as unknown[]).filter((x): x is string => typeof x === 'string')
-      : typeof item.ingredients === 'string'
-      ? item.ingredients.split('\n').filter(Boolean)
-      : [];
+    // Ingrédients : accepte Ingredient[], string[] ou string (séparé par \n)
+    const rawIng = item.ingredients;
+    let ingredients: Ingredient[];
+    if (Array.isArray(rawIng) && rawIng.length > 0 && typeof rawIng[0] === 'object' && rawIng[0] !== null && 'name' in (rawIng[0] as object)) {
+      ingredients = rawIng as Ingredient[];
+    } else if (Array.isArray(rawIng)) {
+      ingredients = (rawIng as unknown[])
+        .filter((x): x is string => typeof x === 'string')
+        .map((line) => ({ qty: null, unit: '', name: line }));
+    } else if (typeof rawIng === 'string') {
+      ingredients = rawIng.split('\n').filter(Boolean).map((line) => ({ qty: null, unit: '', name: line }));
+    } else {
+      ingredients = [];
+    }
 
     // Steps : valide chaque étape individuellement
     const steps: RecipeStep[] = Array.isArray(item.steps)

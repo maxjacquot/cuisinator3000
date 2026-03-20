@@ -63,10 +63,6 @@ function getRayon(name: string): string {
   return RAYON_AUTRE.label;
 }
 
-function getRayonEmoji(label: string): string {
-  return RAYONS.find((r) => r.label === label)?.emoji ?? RAYON_AUTRE.emoji;
-}
-
 // ─── Groupement ───────────────────────────────────────────────
 
 type Group = { title: string; emoji: string; items: ShoppingItem[] };

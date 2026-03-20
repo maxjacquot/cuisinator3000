@@ -1,5 +1,11 @@
 export type StepType = 'prep' | 'cook' | 'wait' | 'rest';
 
+export type Ingredient = {
+  qty: number | null;
+  unit: string;
+  name: string;
+};
+
 export type RecipeStep = {
   label: string;
   instruction: string;
@@ -14,7 +20,7 @@ export type Recipe = {
   prep_time: number;
   cook_time: number;
   description: string;
-  ingredients: string; // newline-separated
+  ingredients: string; // JSON: Ingredient[]
   steps: string;       // JSON: RecipeStep[]
   tags: string;        // JSON: string[]
 };

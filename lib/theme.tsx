@@ -5,7 +5,6 @@
 import React from 'react';
 import {
   StyleSheet,
-  TouchableOpacity,
   Text,
   View,
   ViewStyle,
@@ -96,68 +95,6 @@ export const shadows = {
   },
 } as const;
 
-// ─── Composant : Button ───────────────────────────────────────
-interface ButtonProps {
-  label: string;
-  onPress: () => void;
-  variant?: 'primary' | 'outline';
-  style?: ViewStyle;
-}
-
-export const Button: React.FC<ButtonProps> = ({
-  label,
-  onPress,
-  variant = 'primary',
-  style,
-}) => (
-  <TouchableOpacity
-    style={[
-      buttonStyles.base,
-      variant === 'outline' ? buttonStyles.outline : buttonStyles.primary,
-      style,
-    ]}
-    onPress={onPress}
-    activeOpacity={0.8}
-  >
-    <Text
-      style={[
-        buttonStyles.label,
-        variant === 'outline' && buttonStyles.labelOutline,
-      ]}
-    >
-      {label}
-    </Text>
-  </TouchableOpacity>
-);
-
-const buttonStyles = StyleSheet.create({
-  base: {
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md + 2,
-    borderRadius: radii.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primary: {
-    backgroundColor: colors.primary,
-    ...shadows.primary,
-  },
-  outline: {
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-  },
-  label: {
-    fontSize: typography.fontSizes.md,
-    fontWeight: typography.fontWeights.bold,
-    color: colors.surface,
-    letterSpacing: 0.3,
-  },
-  labelOutline: {
-    color: colors.primary,
-  },
-});
-
 // ─── Composant : Badge ────────────────────────────────────────
 interface BadgeProps {
   label: string;
@@ -194,21 +131,3 @@ const badgeStyles = StyleSheet.create({
   },
 });
 
-// ─── Composant : Card ─────────────────────────────────────────
-interface CardProps {
-  style?: ViewStyle;
-  children: React.ReactNode;
-}
-
-export const Card: React.FC<CardProps> = ({ style, children }) => (
-  <View style={[cardStyles.container, style]}>{children}</View>
-);
-
-const cardStyles = StyleSheet.create({
-  container: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    padding: spacing.lg,
-    ...shadows.md,
-  },
-});

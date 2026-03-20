@@ -3,7 +3,7 @@ import { SEED_RECIPES, toDbFormat } from './data/recipes';
 export type { ImportResult } from './data/importRecipes';
 
 // ─── Re-exports des types ──────────────────────────────────────
-export type { StepType, RecipeStep, Recipe, ShoppingItem, MealSlot, MealPlan } from './types';
+export type { StepType, RecipeStep, Recipe, Ingredient, ShoppingItem, MealSlot, MealPlan } from './types';
 
 // ─── Init ─────────────────────────────────────────────────────
 

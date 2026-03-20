@@ -1,49 +1,27 @@
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { useRouter, usePathname } from 'expo-router';
 import { colors, typography, spacing } from './theme';
 
 const TABS = [
-  { label: 'Courses', icon: '🛒', href: '/courses' },
-  { label: 'Accueil', icon: '🏠', href: '/' },
-  { label: 'Recettes', icon: '📖', href: '/recipes' },
+  { label: 'Courses', icon: '🛒' },
+  { label: 'Accueil', icon: '🏠' },
+  { label: 'Recettes', icon: '📖' },
 ] as const;
 
 interface TabBarProps {
-  // Mode panneau : props explicites (pas de navigation)
-  activeTab?: number;
-  onSwitch?: (index: number) => void;
+  activeTab: number;
+  onSwitch: (index: number) => void;
 }
 
 export function TabBar({ activeTab, onSwitch }: TabBarProps) {
-  // Mode legacy : détection par pathname + router (pour les écrans standalone restants)
-  const router = useRouter();
-  const pathname = usePathname();
-
-  function isActive(index: number) {
-    if (activeTab !== undefined) return index === activeTab;
-    const href = TABS[index].href;
-    if (href === '/') return pathname === '/';
-    return pathname.startsWith(href);
-  }
-
-  function handlePress(index: number) {
-    if (isActive(index)) return;
-    if (onSwitch) {
-      onSwitch(index);
-    } else {
-      router.replace(TABS[index].href);
-    }
-  }
-
   return (
     <View style={styles.container}>
       {TABS.map((tab, i) => {
-        const active = isActive(i);
+        const active = i === activeTab;
         return (
           <Pressable
             key={tab.label}
             style={({ pressed }) => [styles.tab, pressed && !active && styles.tabPressed]}
-            onPress={() => handlePress(i)}
+            onPress={() => { if (!active) onSwitch(i); }}
           >
             {active && <View style={styles.activeIndicator} />}
             <Text style={styles.icon}>{tab.icon}</Text>

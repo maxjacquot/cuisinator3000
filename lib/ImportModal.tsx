@@ -35,13 +35,16 @@ Génère un tableau JSON en respectant exactement ce format :
     "description": "Courte description en 1-2 phrases.",
     "tags": ["végétarien", "rapide"],
     "ingredients": [
-      "Ingrédient 1 (quantité)",
-      "Ingrédient 2 (quantité)"
+      { "qty": 200, "unit": "g", "name": "farine" },
+      { "qty": 1, "unit": "L", "name": "eau" },
+      { "qty": 2, "unit": "unités", "name": "œufs" },
+      { "qty": 1, "unit": "c. à café", "name": "cumin en poudre" },
+      { "qty": 2, "unit": "c. à soupe", "name": "huile d'olive" }
     ],
     "steps": [
       {
         "label": "Nom de l'étape",
-        "instruction": "Description détaillée de ce qu'il faut faire.",
+        "instruction": "Description détaillée. Si vous n'utilisez qu'une partie d'un ingrédient, indiquez la fraction (ex: la moitié de l'eau, 1/3 de la farine).",
         "duration": 10,
         "type": "prep"
       }
@@ -49,13 +52,27 @@ Génère un tableau JSON en respectant exactement ce format :
   }
 ]
 
-Règles :
+Règles générales :
 - "category" : uniquement "Plat", "Entrée" ou "Dessert"
 - "prep_time" : temps total en minutes (somme de toutes les étapes)
 - "cook_time" : temps de cuisson seul en minutes (0 si aucun)
 - "type" dans les steps : "prep" (préparation active), "cook" (cuisson active), "wait" (attente/four/frigo), "rest" (repos après cuisson)
-- "tags" : tableau de mots-clés parmi : végétarien, vegan, carnivore, poisson, volaille, sandwich, soupe, salade, pâtes, riz, rapide, batch-cooking, sans-gluten, épicé, doux, enfants, light, fait-maison — choisis ceux qui correspondent, 1 à 5 tags max
-- Sois précis sur les quantités dans "ingredients"
+- "tags" : tableau de mots-clés parmi : végétarien, vegan, carnivore, poisson, volaille, sandwich, soupe, salade, pâtes, riz, rapide, batch-cooking, sans-gluten, épicé, doux, enfants, light, fait-maison — 1 à 5 tags max
+
+Règles pour les ingrédients :
+- Chaque ingrédient est un objet { "qty", "unit", "name" }
+- "name" : nom seul, sans quantité ni unité
+- "qty" : nombre (entier ou décimal), ou null si pas de quantité mesurable
+- "unit" : choisir selon le type d'ingrédient :
+  → Achetables au poids/volume : "g", "kg", "ml", "cl", "L"
+  → Achetables à la pièce : "unité" (singulier) ou "unités" (pluriel)
+  → Épices et condiments (achetés en flacon) : garder la mesure recette ("c. à café", "c. à soupe", "pincée") — l'app les affichera sans quantité dans la liste de courses
+- NE PAS inclure sel, poivre, et condiments toujours présents en cuisine — ils sont sous-entendus
+
+Règles pour les étapes (steps) :
+- Si une quantité d'ingrédient est répartie sur plusieurs étapes, utiliser des fractions dans les instructions au lieu de valeurs absolues
+  Exemple : recette avec 1L d'eau utilisé en deux fois → étape 1 : "versez la moitié de l'eau", étape 2 : "ajoutez le reste de l'eau"
+  Autres exemples de fractions : "1/3 de la farine", "les 2/3 restants", "la moitié du lait"
 - Génère uniquement le JSON brut, sans texte autour
 
 Voici la ou les recettes à convertir :

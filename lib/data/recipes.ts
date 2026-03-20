@@ -1,4 +1,4 @@
-import type { RecipeStep } from '../types';
+import type { RecipeStep, Ingredient } from '../types';
 
 export type SeedRecipe = {
   title: string;
@@ -6,7 +6,7 @@ export type SeedRecipe = {
   prep_time: number;
   cook_time: number;
   description: string;
-  ingredients: string[];
+  ingredients: Ingredient[];
   steps: RecipeStep[];
   tags: string[];
 };
@@ -19,18 +19,17 @@ export const SEED_RECIPES: SeedRecipe[] = [
     cook_time: 15,
     description: "Des falafels maison ultra dorés et croustillants, cuits à l'air fryer pour un résultat léger et savoureux. Servis dans un pain pita avec une sauce au yaourt grec à l'ail et au citron.",
     ingredients: [
-      "400 g de pois chiches cuits en boîte, égouttés (environ 14.3 oz)",
-      "1 oignon rouge",
-      "2 gousses d'ail",
-      "20 g de persil frais",
-      "1 c. à café de cumin en poudre",
-      "1 c. à café de coriandre en poudre",
-      "3 c. à soupe de farine",
-      "1 c. à soupe d'huile d'olive (pour badigeonner)",
-      "Sel & poivre",
-      "100 g de yaourt grec",
-      "1/2 citron (jus)",
-      "2 pains pita",
+      { qty: 400, unit: 'g', name: "pois chiches cuits en boîte, égouttés" },
+      { qty: 1, unit: 'unité', name: "oignon rouge" },
+      { qty: 2, unit: 'unités', name: "gousses d'ail" },
+      { qty: 20, unit: 'g', name: "persil frais" },
+      { qty: 1, unit: 'c. à café', name: "cumin en poudre" },
+      { qty: 1, unit: 'c. à café', name: "coriandre en poudre" },
+      { qty: 3, unit: 'c. à soupe', name: "farine" },
+      { qty: 1, unit: 'c. à soupe', name: "huile d'olive (pour badigeonner)" },
+      { qty: 100, unit: 'g', name: "yaourt grec" },
+      { qty: 0.5, unit: 'unité', name: "citron (jus)" },
+      { qty: 2, unit: 'unités', name: "pains pita" },
     ],
     tags: ["végétarien", "fait-maison", "air-fryer", "sandwich"],
     steps: [
@@ -87,7 +86,7 @@ export function toDbFormat(r: SeedRecipe): Omit<import('../types').Recipe, 'id'>
     prep_time: r.prep_time,
     cook_time: r.cook_time,
     description: r.description,
-    ingredients: r.ingredients.join('\n'),
+    ingredients: r.ingredients.length > 0 ? JSON.stringify(r.ingredients) : '[]',
     steps: r.steps.length > 0 ? JSON.stringify(r.steps) : '',
     tags: r.tags.length > 0 ? JSON.stringify(r.tags) : '[]',
   };

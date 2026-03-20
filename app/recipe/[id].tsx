@@ -18,6 +18,7 @@ import {
   getShoppingList,
   type Recipe,
   type RecipeStep,
+  type Ingredient,
 } from '../../lib/database';
 import { colors, typography, spacing, radii, shadows } from '../../lib/theme';
 import { useAppAlert } from '../../lib/AppAlert';
@@ -25,23 +26,40 @@ import { PlanningModal } from '../../lib/PlanningModal';
 
 // ─── Helpers ingrédients ──────────────────────────────────────
 
+// Unités qu'on peut réellement acheter en magasin (avec une quantité précise)
+const BUYABLE_UNITS = new Set(['g', 'kg', 'ml', 'cl', 'L', 'unité', 'unités']);
+
+function parseStoredIngredients(stored: string): Ingredient[] {
+  if (!stored) return [];
+  try {
+    const parsed = JSON.parse(stored);
+    if (Array.isArray(parsed)) return parsed as Ingredient[];
+  } catch { /* ignore */ }
+  // Fallback : ancien format séparé par \n
+  return stored.split('\n').filter(Boolean).map((line) => ({ qty: null, unit: '', name: line }));
+}
+
 export type IngredientLine = {
   id: number;
-  original: string;
-  qty: number | null;  // null = pas de quantité détectée
-  suffix: string;      // tout ce qui suit le nombre ("g de farine", " œufs", …)
+  qty: number | null;
+  unit: string;
+  name: string;
   currentQty: number;  // quantité ajustée par l'utilisateur
   included: boolean;   // pour les lignes sans quantité
 };
 
-function parseIngredients(lines: string[], factor: number): IngredientLine[] {
-  return lines.map((line, id) => {
-    const match = line.match(/^(\d+(?:[.,]\d+)?)(.*)/);
-    if (!match) {
-      return { id, original: line, qty: null, suffix: line, currentQty: 0, included: true };
-    }
-    const qty = parseFloat(match[1].replace(',', '.'));
-    return { id, original: line, qty, suffix: match[2], currentQty: qty * factor, included: true };
+function parseIngredients(stored: string, factor: number): IngredientLine[] {
+  return parseStoredIngredients(stored).map((ing, id) => {
+    // On propose une quantité réglable uniquement pour les unités achetables en magasin
+    const isBuyable = ing.qty !== null && BUYABLE_UNITS.has(ing.unit);
+    return {
+      id,
+      qty: isBuyable ? ing.qty : null,
+      unit: ing.unit,
+      name: ing.name,
+      currentQty: isBuyable && ing.qty !== null ? ing.qty * factor : 0,
+      included: true,
+    };
   });
 }
 
@@ -50,8 +68,11 @@ function formatQty(n: number): string {
 }
 
 function reconstructLine(line: IngredientLine): string {
-  if (line.qty === null) return line.original;
-  return formatQty(line.currentQty) + line.suffix;
+  if (line.qty === null) return line.name;
+  const parts: string[] = [formatQty(line.currentQty)];
+  if (line.unit) parts.push(line.unit);
+  parts.push(line.name);
+  return parts.join(' ');
 }
 
 function getStep(qty: number): number {
@@ -61,10 +82,15 @@ function getStep(qty: number): number {
   return 1;
 }
 
-// Clé de comparaison : la partie non-numérique de l'ingrédient (ex: " œufs", "g de farine")
+// Clé de comparaison : extrait le nom de l'ingrédient en ignorant la quantité et l'unité
 function ingredientBaseKey(name: string): string {
-  const match = name.match(/^(\d+(?:[.,]\d+)?)(.*)/);
-  return (match ? match[2] : name).toLowerCase().trim();
+  // Tente de sauter "qty unit " (ex: "400 g pois chiches" → "pois chiches")
+  const m = name.match(/^\d+(?:[.,]\d+)?\s+\S+\s+(.*)/);
+  if (m) return m[1].toLowerCase().trim();
+  // Tente de sauter juste "qty " (ex: "400 pois chiches" → "pois chiches")
+  const m2 = name.match(/^\d+(?:[.,]\d+)?\s+(.*)/);
+  if (m2) return m2[1].toLowerCase().trim();
+  return name.toLowerCase().trim();
 }
 
 // Additionne les quantités de deux chaînes ingrédient ayant la même clé de base
@@ -153,7 +179,7 @@ function IngredientsAdjustModal({
                   style={[adjModal.rowName, isZero && adjModal.rowNameDisabled]}
                   numberOfLines={2}
                 >
-                  {item.qty !== null ? item.suffix.replace(/^\s*/, '') : item.original}
+                  {item.name}
                 </Text>
 
                 {/* Stepper si quantité détectée */}
@@ -169,11 +195,8 @@ function IngredientsAdjustModal({
                     <View style={adjModal.stepValue}>
                       <Text style={[adjModal.stepValueText, isZero && adjModal.stepValueZero]}>
                         {formatQty(item.currentQty)}
-                        {/* Unité collée si présente (ex: "g", "ml") */}
-                        {item.suffix.match(/^([a-zA-Zg-ÿ]+)/) ? (
-                          <Text style={adjModal.stepUnit}>
-                            {item.suffix.match(/^([a-zA-Zg-ÿ]+)/)![1]}
-                          </Text>
+                        {item.unit ? (
+                          <Text style={adjModal.stepUnit}> {item.unit}</Text>
                         ) : null}
                       </Text>
                     </View>
@@ -332,12 +355,8 @@ export default function RecipeScreen() {
 
   function handlePlanningConfirm(newSlots: number) {
     if (!recipe || newSlots === 0) return; // aucun nouveau créneau, pas d'ajout aux courses
-    const rawLines = recipe.ingredients
-      .split('\n')
-      .map((s) => s.trim())
-      .filter(Boolean);
     setTotalSlotsRef(newSlots);
-    setIngredientLines(parseIngredients(rawLines, newSlots));
+    setIngredientLines(parseIngredients(recipe.ingredients, newSlots));
     setAdjustModalVisible(true);
   }
 
@@ -357,7 +376,7 @@ export default function RecipeScreen() {
 
     for (const line of active) {
       const newName = reconstructLine(line);
-      const baseKey = ingredientBaseKey(newName);
+      const baseKey = line.name.toLowerCase().trim();
       const match = existing.find((e) => ingredientBaseKey(e.name) === baseKey);
 
       if (match) {
@@ -385,10 +404,7 @@ export default function RecipeScreen() {
     );
   }
 
-  const ingredients = recipe.ingredients
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const ingredients = parseStoredIngredients(recipe.ingredients);
 
   let steps: RecipeStep[] = [];
   try {
@@ -462,7 +478,12 @@ export default function RecipeScreen() {
               {ingredients.map((ing, i) => (
                 <View key={i} style={styles.ingredientRow}>
                   <View style={styles.ingredientDot} />
-                  <Text style={styles.ingredientText}>{ing}</Text>
+                  {ing.qty !== null && (
+                    <Text style={styles.ingredientQty}>
+                      {formatQty(ing.qty)}{ing.unit ? ` ${ing.unit}` : ''}
+                    </Text>
+                  )}
+                  <Text style={styles.ingredientText}>{ing.name}</Text>
                 </View>
               ))}
             </View>
@@ -608,7 +629,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     flexShrink: 0,
   },
+  ingredientQty: {
+    fontSize: typography.fontSizes.md,
+    fontWeight: typography.fontWeights.semiBold,
+    color: colors.primary,
+    minWidth: 52,
+  },
   ingredientText: {
+    flex: 1,
     fontSize: typography.fontSizes.md,
     color: colors.textPrimary,
   },
