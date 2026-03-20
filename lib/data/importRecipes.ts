@@ -70,6 +70,10 @@ export function parseImportJson(json: string): { recipes: SeedRecipe[]; errors: 
         })
       : [];
 
+    const tags: string[] = Array.isArray(item.tags)
+      ? (item.tags as unknown[]).filter((x): x is string => typeof x === 'string')
+      : [];
+
     recipes.push({
       title: item.title as string,
       category: item.category as 'Plat' | 'Entrée' | 'Dessert',
@@ -78,6 +82,7 @@ export function parseImportJson(json: string): { recipes: SeedRecipe[]; errors: 
       description: typeof item.description === 'string' ? item.description : '',
       ingredients,
       steps,
+      tags,
     });
   }
 

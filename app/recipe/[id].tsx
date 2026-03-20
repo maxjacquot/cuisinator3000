@@ -395,6 +395,9 @@ export default function RecipeScreen() {
     if (recipe.steps) steps = JSON.parse(recipe.steps);
   } catch { /* ignore */ }
 
+  let tags: string[] = [];
+  try { if (recipe.tags) tags = JSON.parse(recipe.tags); } catch { /* ignore */ }
+
   const hasCookTime = recipe.cook_time > 0;
   const prepOnly = hasCookTime ? recipe.prep_time - recipe.cook_time : recipe.prep_time;
 
@@ -424,6 +427,18 @@ export default function RecipeScreen() {
 
         {/* Titre */}
         <Text style={styles.title}>{recipe.title}</Text>
+
+        {/* Tags */}
+        {tags.length > 0 && (
+          <View style={styles.tagsRow}>
+            {tags.map((tag) => (
+              <View key={tag} style={styles.tagChip}>
+                <Text style={styles.tagChipText}>{tag}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
         <View style={styles.divider} />
 
         {/* Description */}
@@ -609,6 +624,26 @@ const styles = StyleSheet.create({
     color: colors.surface,
     fontSize: typography.fontSizes.md,
     fontWeight: typography.fontWeights.bold,
+  },
+  tagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  tagChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.full,
+    backgroundColor: colors.primaryLight,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  tagChipText: {
+    fontSize: typography.fontSizes.xs,
+    color: colors.primary,
+    fontWeight: typography.fontWeights.semiBold,
   },
   deleteBtn: {
     marginTop: spacing.xxxxl,

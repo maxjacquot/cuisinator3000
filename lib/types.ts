@@ -16,6 +16,7 @@ export type Recipe = {
   description: string;
   ingredients: string; // newline-separated
   steps: string;       // JSON: RecipeStep[]
+  tags: string;        // JSON: string[]
 };
 
 export type ShoppingItem = {

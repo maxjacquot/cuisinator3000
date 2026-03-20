@@ -33,6 +33,7 @@ Génère un tableau JSON en respectant exactement ce format :
     "prep_time": 30,
     "cook_time": 20,
     "description": "Courte description en 1-2 phrases.",
+    "tags": ["végétarien", "rapide"],
     "ingredients": [
       "Ingrédient 1 (quantité)",
       "Ingrédient 2 (quantité)"
@@ -53,6 +54,7 @@ Règles :
 - "prep_time" : temps total en minutes (somme de toutes les étapes)
 - "cook_time" : temps de cuisson seul en minutes (0 si aucun)
 - "type" dans les steps : "prep" (préparation active), "cook" (cuisson active), "wait" (attente/four/frigo), "rest" (repos après cuisson)
+- "tags" : tableau de mots-clés parmi : végétarien, vegan, carnivore, poisson, volaille, sandwich, soupe, salade, pâtes, riz, rapide, batch-cooking, sans-gluten, épicé, doux, enfants, light, fait-maison — choisis ceux qui correspondent, 1 à 5 tags max
 - Sois précis sur les quantités dans "ingredients"
 - Génère uniquement le JSON brut, sans texte autour
 

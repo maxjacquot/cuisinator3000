@@ -11,6 +11,8 @@ import { useRouter, useFocusEffect, Stack } from 'expo-router';
 import { TabBar } from '../../lib/TabBar';
 import { getAllRecipes, type Recipe } from '../../lib/database';
 import { colors, typography, spacing, radii, shadows, Badge } from '../../lib/theme';
+import { ImportModal } from '../../lib/ImportModal';
+import { AddRecipeModal } from '../../lib/AddRecipeModal';
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -78,6 +80,8 @@ export default function RecipesScreen() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState('Toutes');
+  const [addVisible, setAddVisible] = useState(false);
+  const [importVisible, setImportVisible] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -100,7 +104,35 @@ export default function RecipesScreen() {
           headerTintColor: colors.surface,
           headerTitleStyle: { fontWeight: 'bold' },
           headerBackVisible: false,
+          headerRight: () => (
+            <View style={{ flexDirection: 'row', gap: 8, marginRight: 4 }}>
+              <TouchableOpacity
+                style={styles.headerBtn}
+                onPress={() => setImportVisible(true)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.headerBtnText}>Importer</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.headerBtn, styles.headerBtnPrimary]}
+                onPress={() => setAddVisible(true)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.headerBtnText, styles.headerBtnPrimaryText]}>＋ Ajouter</Text>
+              </TouchableOpacity>
+            </View>
+          ),
         }}
+      />
+      <AddRecipeModal
+        visible={addVisible}
+        onClose={() => setAddVisible(false)}
+        onAdded={() => { setAddVisible(false); setRecipes(getAllRecipes()); }}
+      />
+      <ImportModal
+        visible={importVisible}
+        onClose={() => setImportVisible(false)}
+        onImported={() => { setImportVisible(false); setRecipes(getAllRecipes()); }}
       />
       <View style={styles.root}>
         {/* Recherche */}
@@ -213,6 +245,23 @@ const styles = StyleSheet.create({
     marginTop: spacing.xxxxl,
     color: colors.textSecondary,
     fontSize: typography.fontSizes.md,
+  },
+  headerBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radii.full,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  headerBtnPrimary: {
+    backgroundColor: colors.primary,
+  },
+  headerBtnText: {
+    color: colors.surface,
+    fontSize: typography.fontSizes.sm,
+    fontWeight: typography.fontWeights.semiBold,
+  },
+  headerBtnPrimaryText: {
+    color: colors.surface,
   },
   card: {
     backgroundColor: colors.surface,

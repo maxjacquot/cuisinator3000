@@ -19,7 +19,8 @@ export function initDatabase() {
       cook_time INTEGER NOT NULL DEFAULT 0,
       description TEXT NOT NULL,
       ingredients TEXT NOT NULL DEFAULT '',
-      steps TEXT NOT NULL DEFAULT ''
+      steps TEXT NOT NULL DEFAULT '',
+      tags TEXT NOT NULL DEFAULT '[]'
     );
   `);
 
@@ -45,6 +46,7 @@ export function initDatabase() {
     `ALTER TABLE recipes ADD COLUMN ingredients TEXT NOT NULL DEFAULT '';`,
     `ALTER TABLE recipes ADD COLUMN cook_time INTEGER NOT NULL DEFAULT 0;`,
     `ALTER TABLE recipes ADD COLUMN steps TEXT NOT NULL DEFAULT '';`,
+    `ALTER TABLE recipes ADD COLUMN tags TEXT NOT NULL DEFAULT '[]';`,
   ]) {
     try { db.execSync(col); } catch { /* déjà présente */ }
   }
@@ -61,8 +63,8 @@ function seedDatabase() {
   for (const recipe of SEED_RECIPES) {
     const r = toDbFormat(recipe);
     db.runSync(
-      'INSERT INTO recipes (title, category, prep_time, cook_time, description, ingredients, steps) VALUES (?, ?, ?, ?, ?, ?, ?);',
-      [r.title, r.category, r.prep_time, r.cook_time, r.description, r.ingredients, r.steps]
+      'INSERT INTO recipes (title, category, prep_time, cook_time, description, ingredients, steps, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?);',
+      [r.title, r.category, r.prep_time, r.cook_time, r.description, r.ingredients, r.steps, r.tags]
     );
   }
 }
@@ -94,8 +96,8 @@ export function importRecipes(json: string): ImportResult {
   for (const recipe of recipes) {
     const r = toDbFormat(recipe);
     db.runSync(
-      'INSERT INTO recipes (title, category, prep_time, cook_time, description, ingredients, steps) VALUES (?, ?, ?, ?, ?, ?, ?);',
-      [r.title, r.category, r.prep_time, r.cook_time, r.description, r.ingredients, r.steps]
+      'INSERT INTO recipes (title, category, prep_time, cook_time, description, ingredients, steps, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?);',
+      [r.title, r.category, r.prep_time, r.cook_time, r.description, r.ingredients, r.steps, r.tags]
     );
   }
   return { imported: recipes.length, errors };
@@ -111,8 +113,8 @@ export function getRecipeById(id: number): Recipe | null {
 
 export function addRecipe(recipe: Omit<Recipe, 'id'>): void {
   db.runSync(
-    'INSERT INTO recipes (title, category, prep_time, cook_time, description, ingredients, steps) VALUES (?, ?, ?, ?, ?, ?, ?);',
-    [recipe.title, recipe.category, recipe.prep_time, recipe.cook_time ?? 0, recipe.description, recipe.ingredients, recipe.steps ?? '']
+    'INSERT INTO recipes (title, category, prep_time, cook_time, description, ingredients, steps, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?);',
+    [recipe.title, recipe.category, recipe.prep_time, recipe.cook_time ?? 0, recipe.description, recipe.ingredients, recipe.steps ?? '', recipe.tags ?? '[]']
   );
 }
 

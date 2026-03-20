@@ -8,6 +8,7 @@ export type SeedRecipe = {
   description: string;
   ingredients: string[];
   steps: RecipeStep[];
+  tags: string[];
 };
 
 export const SEED_RECIPES: SeedRecipe[] = [
@@ -31,6 +32,7 @@ export const SEED_RECIPES: SeedRecipe[] = [
       "1/2 citron (jus)",
       "2 pains pita",
     ],
+    tags: ["végétarien", "fait-maison", "air-fryer", "sandwich"],
     steps: [
       {
         label: "Mixer la pâte",
@@ -87,5 +89,6 @@ export function toDbFormat(r: SeedRecipe): Omit<import('../types').Recipe, 'id'>
     description: r.description,
     ingredients: r.ingredients.join('\n'),
     steps: r.steps.length > 0 ? JSON.stringify(r.steps) : '',
+    tags: r.tags.length > 0 ? JSON.stringify(r.tags) : '[]',
   };
 }

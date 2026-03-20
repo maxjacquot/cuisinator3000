@@ -22,9 +22,6 @@ export default function RootLayout() {
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="recipe/[id]" options={{ title: 'Recette' }} />
-        <Stack.Screen name="add" options={{ title: 'Nouvelle recette', presentation: 'modal' }} />
-        <Stack.Screen name="calendar/index" options={{ title: 'Mon planning' }} />
-        <Stack.Screen name="calendar/pick" options={{ title: 'Choisir une recette', presentation: 'modal' }} />
       </Stack>
     </>
   );
