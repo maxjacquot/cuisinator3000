@@ -24,12 +24,30 @@ const RAYONS: { label: string; emoji: string; keywords: string[] }[] = [
   {
     label: 'Fruits & Légumes',
     emoji: '🥦',
-    keywords: ['pomme', 'tomate', 'oignon', 'salade', 'haricot', 'ail', 'thym', 'herbe', 'carotte', 'légume', 'fruit', 'poireau', 'courgette', 'champignon', 'citron', 'persil', 'basilic'],
+    keywords: [
+      // Légumes
+      'tomate', 'oignon', 'échalote', 'ail', 'carotte', 'poireau', 'courgette', 'champignon',
+      'poivron', 'aubergine', 'brocoli', 'épinard', 'chou', 'céleri', 'artichaut', 'asperge',
+      'betterave', 'concombre', 'fenouil', 'navet', 'radis', 'patate douce', 'pomme de terre',
+      'potiron', 'potimarron', 'butternut', 'courge', 'maïs', 'petit pois', 'endive', 'laitue',
+      'roquette', 'mâche', 'avocat', 'haricot', 'pois chiche', 'fève',
+      // Herbes fraîches
+      'persil', 'basilic', 'ciboulette', 'menthe',
+      // Fruits
+      'pomme', 'poire', 'banane', 'fraise', 'framboise', 'cerise', 'abricot', 'pêche', 'prune',
+      'raisin', 'orange', 'citron', 'ananas', 'mangue', 'kiwi', 'melon', 'figue', 'myrtille',
+      'fruit', 'légume', 'salade',
+    ],
   },
   {
-    label: 'Viandes & Poissons',
+    label: 'Viandes',
     emoji: '🥩',
-    keywords: ['poulet', 'guanciale', 'thon', 'anchois', 'viande', 'poisson', 'bœuf', 'porc', 'lardon', 'jambon', 'saumon', 'crevette', 'merlan'],
+    keywords: ['poulet', 'guanciale', 'viande', 'bœuf', 'porc', 'lardon', 'jambon', 'veau', 'agneau', 'canard', 'dinde'],
+  },
+  {
+    label: 'Poissons & Fruits de mer',
+    emoji: '🐟',
+    keywords: ['thon', 'anchois', 'poisson', 'saumon', 'crevette', 'merlan', 'cabillaud', 'moule', 'calmar', 'seiche'],
   },
   {
     label: 'Produits laitiers',
@@ -39,12 +57,41 @@ const RAYONS: { label: string; emoji: string; keywords: string[] }[] = [
   {
     label: 'Boulangerie',
     emoji: '🥖',
-    keywords: ['baguette', 'pain', 'brioche', 'farine'],
+    keywords: ['baguette', 'pain', 'brioche'],
   },
   {
     label: 'Épicerie',
     emoji: '🫙',
-    keywords: ['pâte', 'sucre', 'sel', 'poivre', 'huile', 'vinaigre', 'bouillon', 'cassonade', 'vanille', 'canelle', 'moutarde', 'sauce', 'riz', 'lentille', 'fécule', 'levure', 'chocolat', 'miel'],
+    keywords: ['pâte', 'farine', 'sucre', 'sel', 'poivre', 'huile', 'vinaigre', 'bouillon', 'cassonade', 'moutarde', 'sauce', 'riz', 'lentille', 'fécule', 'levure', 'chocolat', 'miel'],
+  },
+  {
+    label: 'Épices',
+    emoji: '🌶️',
+    keywords: [
+      // Épices
+      'cumin', 'curcuma', 'curry', 'paprika', 'cannelle', 'vanille', 'cardamome', 'coriandre',
+      'gingembre', 'piment', 'safran', 'muscade', 'anis', 'clou de girofle', 'fenugrec',
+      // Herbes séchées
+      'thym', 'romarin', 'laurier', 'origan', 'sauge', 'estragon', 'aneth', 'herbe de provence',
+    ],
+  },
+  {
+    label: 'Cuisine du monde',
+    emoji: '🌍',
+    keywords: [
+      // Asiatique — sauces & condiments
+      'soja', 'nuoc mam', 'miso', 'hoisin', 'teriyaki', 'oyster', 'sriracha', 'sambal',
+      'mirin', 'saké', 'vinaigre de riz', 'huile de sésame', 'pâte de curry', 'wasabi', 'tahini',
+      // Asiatique — produits secs
+      'nouille', 'vermicelle de riz', 'soba', 'udon', 'ramen', 'galette de riz', 'feuille de riz',
+      'lait de coco', 'crème de coco', 'pâte de tamarin', 'tofu',
+      // Mexicain / Tex-Mex
+      'tortilla', 'nachos', 'jalapeño', 'guacamole', 'salsa', 'haricot noir', 'haricot rouge',
+      // Moyen-Orient
+      'houmous', 'pita', 'chapati', 'naan', 'semoule', 'couscous', 'boulgour',
+      // Autres
+      'kimchi', 'tempeh', 'edamame',
+    ],
   },
   {
     label: 'Boissons',
@@ -57,8 +104,12 @@ const RAYON_AUTRE = { label: 'Autres', emoji: '🛒' };
 
 function getRayon(name: string): string {
   const lower = name.toLowerCase();
+  const isFresh = lower.includes('fraîch') || lower.includes('frais');
   for (const rayon of RAYONS) {
-    if (rayon.keywords.some((kw) => lower.includes(kw))) return rayon.label;
+    if (rayon.keywords.some((kw) => lower.includes(kw))) {
+      if (isFresh && rayon.label === 'Épices') return 'Fruits & Légumes';
+      return rayon.label;
+    }
   }
   return RAYON_AUTRE.label;
 }
