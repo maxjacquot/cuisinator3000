@@ -185,7 +185,7 @@ function RecipePickerModal({ visible, onClose, onSelect }: RecipePickerModalProp
                   <View style={picker.itemMetaRow}>
                     {item.cook_time > 0 ? (
                       <>
-                        <Text style={picker.itemMeta}>🔪 {item.prep_time - item.cook_time} min</Text>
+                        <Text style={picker.itemMeta}>🔪 {item.prep_time} min</Text>
                         <Text style={picker.itemMetaSep}>·</Text>
                         <Text style={[picker.itemMeta, picker.itemMetaCook]}>🔥 {item.cook_time} min</Text>
                       </>
@@ -394,6 +394,8 @@ function HomePanel({ width, isFocused, focusKey }: HomePanelProps) {
   const [adjustRecipe, setAdjustRecipe] = useState<Recipe | null>(null);
   const [adjustLines, setAdjustLines] = useState<IngredientLine[]>([]);
   const [adjustSlots, setAdjustSlots] = useState(1);
+  // setMeal différés — appliqués seulement quand l'utilisateur confirme dans la modal courses
+  const [pendingMealAdds, setPendingMealAdds] = useState<{ dateStr: string; slot: string; id: number }[]>([]);
 
   const loadData = useCallback(() => {
     const loaded: DayData[] = Array.from({ length: DAYS_COUNT }, (_, offset) => {
@@ -431,9 +433,8 @@ function HomePanel({ width, isFocused, focusKey }: HomePanelProps) {
     setPickerTarget(null);
 
     if (slot === 'lunch_side' || slot === 'dinner_side' || slot === 'lunch_side2' || slot === 'dinner_side2') {
-      // Accompagnement : assigner directement sans passer par la PlanningModal
-      setMeal(dateStr, slot, recipe.id);
-      loadData();
+      // Accompagnement : setMeal différé jusqu'à confirmation dans la modal courses
+      setPendingMealAdds([{ dateStr, slot, id: recipe.id }]);
       setAdjustRecipe(recipe);
       setAdjustLines(parseIngredients(recipe.ingredients, 1));
       setAdjustSlots(1);
@@ -444,7 +445,8 @@ function HomePanel({ width, isFocused, focusKey }: HomePanelProps) {
     }
   }
 
-  function handlePlanningConfirm(newSlots: number) {
+  function handlePlanningConfirm(pendingAdds: { dateStr: string; slot: string; id: number }[], newSlots: number) {
+    setPendingMealAdds(pendingAdds);
     if (planningRecipe && newSlots > 0) {
       setAdjustRecipe(planningRecipe);
       setAdjustLines(parseIngredients(planningRecipe.ingredients, newSlots));
@@ -455,8 +457,17 @@ function HomePanel({ width, isFocused, focusKey }: HomePanelProps) {
     loadData();
   }
 
+  function confirmCalendar() {
+    for (const { dateStr, slot, id } of pendingMealAdds) {
+      setMeal(dateStr, slot as any, id);
+    }
+    setPendingMealAdds([]);
+    loadData();
+  }
+
   function handleAddToShopping(lines: IngredientLine[]) {
     if (!adjustRecipe) return;
+    confirmCalendar();
     const active = lines.filter((l) => l.qty !== null ? l.currentQty > 0 : l.included);
     const existing = getShoppingList().filter((i) => i.recipe_name === adjustRecipe.title && i.done === 0);
     const toInsert: { name: string; recipe_name: string }[] = [];
@@ -476,6 +487,11 @@ function HomePanel({ width, isFocused, focusKey }: HomePanelProps) {
       title: 'Courses mises à jour !',
       message: `${active.length} ingrédient${active.length > 1 ? 's' : ''} ajouté${active.length > 1 ? 's' : ''} à ta liste de courses.`,
     });
+  }
+
+  function handleNeedNothing() {
+    confirmCalendar();
+    setAdjustRecipe(null);
   }
 
   const plannedCount = days.reduce((acc, d) => {
@@ -584,8 +600,9 @@ function HomePanel({ width, isFocused, focusKey }: HomePanelProps) {
           recipe={adjustRecipe}
           lines={adjustLines}
           totalSlots={adjustSlots}
-          onClose={() => setAdjustRecipe(null)}
+          onClose={() => { setPendingMealAdds([]); setAdjustRecipe(null); }}
           onAdd={handleAddToShopping}
+          onNeedNothing={handleNeedNothing}
           onLinesChange={setAdjustLines}
         />
       )}

@@ -95,11 +95,12 @@ interface IngredientsAdjustModalProps {
   totalSlots: number;
   onClose: () => void;
   onAdd: (lines: IngredientLine[]) => void;
+  onNeedNothing: () => void;
   onLinesChange: (lines: IngredientLine[]) => void;
 }
 
 export function IngredientsAdjustModal({
-  visible, recipe, lines, totalSlots, onClose, onAdd, onLinesChange,
+  visible, recipe, lines, totalSlots, onClose, onAdd, onNeedNothing, onLinesChange,
 }: IngredientsAdjustModalProps) {
   function adjustQty(id: number, delta: number) {
     onLinesChange(lines.map((l) => {
@@ -195,6 +196,9 @@ export function IngredientsAdjustModal({
                 : `Ajouter ${activeCount} ingrédient${activeCount > 1 ? 's' : ''} aux courses`}
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity style={s.needNothingBtn} onPress={onNeedNothing} activeOpacity={0.75}>
+            <Text style={s.needNothingText}>J'ai besoin de rien</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     </Modal>
@@ -245,8 +249,10 @@ const s = StyleSheet.create({
   checkbox: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   checkboxActive: { backgroundColor: colors.success, borderColor: colors.success },
   checkmark: { fontSize: 13, color: colors.surface, fontWeight: typography.fontWeights.bold },
-  footer: { padding: spacing.xl, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface },
+  footer: { padding: spacing.xl, paddingBottom: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.surface, gap: spacing.sm },
   addBtn: { backgroundColor: colors.primary, borderRadius: radii.lg, paddingVertical: spacing.lg, alignItems: 'center', ...shadows.primary },
   addBtnDisabled: { backgroundColor: colors.border, shadowOpacity: 0, elevation: 0 },
   addBtnText: { color: colors.surface, fontSize: typography.fontSizes.md, fontWeight: typography.fontWeights.extraBold },
+  needNothingBtn: { paddingVertical: spacing.md, alignItems: 'center' },
+  needNothingText: { color: colors.textSecondary, fontSize: typography.fontSizes.sm, fontWeight: typography.fontWeights.medium, textDecorationLine: 'underline' },
 });

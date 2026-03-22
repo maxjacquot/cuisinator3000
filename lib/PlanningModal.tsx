@@ -40,8 +40,8 @@ export interface PlanningModalProps {
   /** Pré-sélectionne un créneau à l'ouverture (optionnel) */
   preselect?: { dateStr: string; slot: SlotKey };
   onClose: () => void;
-  /** newSlots = nombre de nouveaux créneaux ajoutés (0 si aucun changement) */
-  onConfirm: (newSlots: number) => void;
+  /** pendingAdds = créneaux à ajouter (setMeal différé), newSlots = nombre */
+  onConfirm: (pendingAdds: { dateStr: string; slot: SlotKey; id: number }[], newSlots: number) => void;
 }
 
 export function PlanningModal({ visible, recipe, preselect, onClose, onConfirm }: PlanningModalProps) {
@@ -76,26 +76,31 @@ export function PlanningModal({ visible, recipe, preselect, onClose, onConfirm }
   }
 
   function handleConfirm() {
+    const pendingAdds: { dateStr: string; slot: SlotKey; id: number }[] = [];
     let newSlots = 0;
     for (const { dateStr } of days) {
       const s = selected[dateStr];
       if (!s) continue;
       const plan = getMealPlan(dateStr);
       if (s.lunch) {
-        if (plan.lunch !== recipe.id) newSlots++;
-        setMeal(dateStr, 'lunch', recipe.id);
+        if (plan.lunch !== recipe.id) {
+          newSlots++;
+          pendingAdds.push({ dateStr, slot: 'lunch', id: recipe.id });
+        }
       } else if (plan.lunch === recipe.id) {
-        setMeal(dateStr, 'lunch', null);
+        setMeal(dateStr, 'lunch', null); // suppressions immédiates
       }
       if (s.dinner) {
-        if (plan.dinner !== recipe.id) newSlots++;
-        setMeal(dateStr, 'dinner', recipe.id);
+        if (plan.dinner !== recipe.id) {
+          newSlots++;
+          pendingAdds.push({ dateStr, slot: 'dinner', id: recipe.id });
+        }
       } else if (plan.dinner === recipe.id) {
-        setMeal(dateStr, 'dinner', null);
+        setMeal(dateStr, 'dinner', null); // suppressions immédiates
       }
     }
     onClose();
-    onConfirm(newSlots);
+    onConfirm(pendingAdds, newSlots);
   }
 
   const totalSelected = Object.values(selected).reduce(
