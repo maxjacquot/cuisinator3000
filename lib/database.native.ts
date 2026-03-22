@@ -9,7 +9,11 @@ export type { StepType, RecipeStep, Recipe, Ingredient, ShoppingItem, MealSlot, 
 
 const db = SQLite.openDatabaseSync('cuisinator.db');
 
+let _dbReady = false;
+
 export function initDatabase() {
+  if (_dbReady) return;
+  _dbReady = true;
   db.execSync(`
     CREATE TABLE IF NOT EXISTS recipes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,6 +51,10 @@ export function initDatabase() {
     `ALTER TABLE recipes ADD COLUMN cook_time INTEGER NOT NULL DEFAULT 0;`,
     `ALTER TABLE recipes ADD COLUMN steps TEXT NOT NULL DEFAULT '';`,
     `ALTER TABLE recipes ADD COLUMN tags TEXT NOT NULL DEFAULT '[]';`,
+    `ALTER TABLE meal_plans ADD COLUMN lunch_side_id INTEGER;`,
+    `ALTER TABLE meal_plans ADD COLUMN dinner_side_id INTEGER;`,
+    `ALTER TABLE meal_plans ADD COLUMN lunch_side2_id INTEGER;`,
+    `ALTER TABLE meal_plans ADD COLUMN dinner_side2_id INTEGER;`,
   ]) {
     try { db.execSync(col); } catch { /* déjà présente */ }
   }
@@ -85,6 +93,9 @@ function migrateExistingRecipes() {
     }
   }
 }
+
+// Run at module load so tables exist before any component renders
+initDatabase();
 
 // ─── Recettes ─────────────────────────────────────────────────
 
@@ -134,18 +145,38 @@ export function deleteRecipe(id: number): void {
 import type { MealPlan, MealSlot } from './types';
 
 export function getMealPlan(date: string): MealPlan {
-  const row = db.getFirstSync<{ lunch_id: number | null; dinner_id: number | null }>(
-    'SELECT * FROM meal_plans WHERE date = ?;',
-    [date]
-  );
-  return { date, lunch: row?.lunch_id ?? null, dinner: row?.dinner_id ?? null };
+  const row = db.getFirstSync<{
+    lunch_id: number | null;
+    dinner_id: number | null;
+    lunch_side_id: number | null;
+    dinner_side_id: number | null;
+    lunch_side2_id: number | null;
+    dinner_side2_id: number | null;
+  }>('SELECT * FROM meal_plans WHERE date = ?;', [date]);
+  return {
+    date,
+    lunch: row?.lunch_id ?? null,
+    dinner: row?.dinner_id ?? null,
+    lunch_side: row?.lunch_side_id ?? null,
+    dinner_side: row?.dinner_side_id ?? null,
+    lunch_side2: row?.lunch_side2_id ?? null,
+    dinner_side2: row?.dinner_side2_id ?? null,
+  };
 }
 
 export function setMeal(date: string, slot: MealSlot, recipeId: number | null): void {
   const current = getMealPlan(date);
   db.runSync(
-    'INSERT OR REPLACE INTO meal_plans (date, lunch_id, dinner_id) VALUES (?, ?, ?);',
-    [date, slot === 'lunch' ? recipeId : current.lunch, slot === 'dinner' ? recipeId : current.dinner]
+    'INSERT OR REPLACE INTO meal_plans (date, lunch_id, dinner_id, lunch_side_id, dinner_side_id, lunch_side2_id, dinner_side2_id) VALUES (?, ?, ?, ?, ?, ?, ?);',
+    [
+      date,
+      slot === 'lunch' ? recipeId : current.lunch,
+      slot === 'dinner' ? recipeId : current.dinner,
+      slot === 'lunch_side' ? recipeId : current.lunch_side,
+      slot === 'dinner_side' ? recipeId : current.dinner_side,
+      slot === 'lunch_side2' ? recipeId : current.lunch_side2,
+      slot === 'dinner_side2' ? recipeId : current.dinner_side2,
+    ]
   );
 }
 

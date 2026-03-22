@@ -91,7 +91,7 @@ export function deleteRecipe(id: number): void {
 
 // ─── Meal Plan ────────────────────────────────────────────────
 
-type MealPlansStore = Record<string, { lunch: number | null; dinner: number | null }>;
+type MealPlansStore = Record<string, { lunch: number | null; dinner: number | null; lunch_side: number | null; dinner_side: number | null; lunch_side2: number | null; dinner_side2: number | null }>;
 
 function loadMealPlans(): MealPlansStore {
   try {
@@ -109,12 +109,12 @@ function saveMealPlans(plans: MealPlansStore): void {
 export function getMealPlan(date: string): MealPlan {
   const plans = loadMealPlans();
   const plan = plans[date];
-  return { date, lunch: plan?.lunch ?? null, dinner: plan?.dinner ?? null };
+  return { date, lunch: plan?.lunch ?? null, dinner: plan?.dinner ?? null, lunch_side: plan?.lunch_side ?? null, dinner_side: plan?.dinner_side ?? null, lunch_side2: plan?.lunch_side2 ?? null, dinner_side2: plan?.dinner_side2 ?? null };
 }
 
 export function setMeal(date: string, slot: MealSlot, recipeId: number | null): void {
   const plans = loadMealPlans();
-  const current = plans[date] ?? { lunch: null, dinner: null };
+  const current = plans[date] ?? { lunch: null, dinner: null, lunch_side: null, dinner_side: null, lunch_side2: null, dinner_side2: null };
   plans[date] = { ...current, [slot]: recipeId };
   saveMealPlans(plans);
 }

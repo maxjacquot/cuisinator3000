@@ -1,13 +1,11 @@
-import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { initDatabase } from '../lib/database';
 import { colors } from '../lib/theme';
 
+initDatabase();
+
 export default function RootLayout() {
-  useEffect(() => {
-    initDatabase();
-  }, []);
 
   return (
     <>

@@ -51,7 +51,7 @@ function RecipeCard({ recipe, onPress }: { recipe: Recipe; onPress: () => void }
         <View style={s.cardMetaRow}>
           {recipe.cook_time > 0 ? (
             <>
-              <Text style={s.cardMeta}>🔪 {recipe.prep_time - recipe.cook_time} min</Text>
+              <Text style={s.cardMeta}>🔪 {recipe.prep_time} min</Text>
               <Text style={s.cardMetaSep}>·</Text>
               <Text style={[s.cardMeta, s.cardMetaCook]}>🔥 {recipe.cook_time} min</Text>
             </>

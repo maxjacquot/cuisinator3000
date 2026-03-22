@@ -32,10 +32,14 @@ export type ShoppingItem = {
   done: number; // 0 | 1
 };
 
-export type MealSlot = 'lunch' | 'dinner';
+export type MealSlot = 'lunch' | 'dinner' | 'lunch_side' | 'dinner_side' | 'lunch_side2' | 'dinner_side2';
 
 export type MealPlan = {
   date: string;
   lunch: number | null;
   dinner: number | null;
+  lunch_side: number | null;
+  dinner_side: number | null;
+  lunch_side2: number | null;
+  dinner_side2: number | null;
 };

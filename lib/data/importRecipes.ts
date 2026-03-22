@@ -18,8 +18,11 @@ export function parseImportJson(json: string): { recipes: SeedRecipe[]; errors: 
   const errors: string[] = [];
   let parsed: unknown;
 
+  // Supprimer les balises markdown (```json ... ``` ou ``` ... ```)
+  const cleaned = json.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+
   try {
-    parsed = JSON.parse(json);
+    parsed = JSON.parse(cleaned);
   } catch {
     return { recipes: [], errors: ['JSON invalide — vérifiez la syntaxe.'] };
   }

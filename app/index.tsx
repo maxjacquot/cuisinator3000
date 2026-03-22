@@ -20,6 +20,9 @@ import {
   getRecipeById,
   getAllRecipes,
   setMeal,
+  addToShoppingList,
+  updateShoppingItemName,
+  getShoppingList,
   type Recipe,
 } from '../lib/database';
 import { colors, typography, spacing, radii, shadows, Badge } from '../lib/theme';
@@ -27,6 +30,15 @@ import { TabBar } from '../lib/TabBar';
 import { CoursesPanel } from '../lib/panels/CoursesPanel';
 import { RecipesPanel } from '../lib/panels/RecipesPanel';
 import { PlanningModal } from '../lib/PlanningModal';
+import {
+  IngredientsAdjustModal,
+  parseIngredients,
+  reconstructLine,
+  ingredientBaseKey,
+  sumIngredientNames,
+  type IngredientLine,
+} from '../lib/ShoppingAdjustModal';
+import { useAppAlert } from '../lib/AppAlert';
 
 // ─── Helpers date ─────────────────────────────────────────────
 
@@ -57,7 +69,11 @@ type DayData = {
   dateStr: string;
   label: { main: string; sub: string };
   lunchRecipe: Recipe | null;
+  lunchSideRecipe: Recipe | null;
+  lunchSide2Recipe: Recipe | null;
   dinnerRecipe: Recipe | null;
+  dinnerSideRecipe: Recipe | null;
+  dinnerSide2Recipe: Recipe | null;
 };
 
 // ─── Modale choix de recette ──────────────────────────────────
@@ -190,16 +206,57 @@ function RecipePickerModal({ visible, onClose, onSelect }: RecipePickerModalProp
 
 // ─── Créneau repas ────────────────────────────────────────────
 
+interface SideSlotProps {
+  side: Recipe | null;
+  onView: () => void;
+  onClear: () => void;
+  onAdd: () => void;
+  placeholder: string;
+}
+
+function SideSlot({ side, onView, onClear, onAdd, placeholder }: SideSlotProps) {
+  if (side) {
+    return (
+      <View style={styles.recipeRow}>
+        <TouchableOpacity style={[styles.recipeCard, styles.sideCard]} onPress={onView} activeOpacity={0.75}>
+          <View style={styles.recipeCardBody}>
+            <Text style={styles.sideTitleText}>{side.title}</Text>
+            <Text style={styles.recipeMeta}>{side.category} · ⏱ {side.prep_time} min</Text>
+          </View>
+          <Text style={styles.recipeChevron}>›</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.clearBtn} onPress={onClear} activeOpacity={0.7}>
+          <Text style={styles.clearBtnText}>✕</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+  return (
+    <TouchableOpacity style={[styles.addSlotBtn, styles.addSideBtn]} onPress={onAdd} activeOpacity={0.7}>
+      <Text style={styles.addSlotIcon}>+</Text>
+      <Text style={styles.addSlotText}>{placeholder}</Text>
+    </TouchableOpacity>
+  );
+}
+
 interface MealSlotProps {
   icon: string;
   label: string;
   recipe: Recipe | null;
+  sideRecipe: Recipe | null;
+  side2Recipe: Recipe | null;
   onView: () => void;
   onClear: () => void;
   onAdd: () => void;
+  onViewSide: () => void;
+  onClearSide: () => void;
+  onAddSide: () => void;
+  onViewSide2: () => void;
+  onClearSide2: () => void;
+  onAddSide2: () => void;
 }
 
-function MealSlot({ icon, label, recipe, onView, onClear, onAdd }: MealSlotProps) {
+function MealSlot({ icon, label, recipe, sideRecipe, side2Recipe, onView, onClear, onAdd, onViewSide, onClearSide, onAddSide, onViewSide2, onClearSide2, onAddSide2 }: MealSlotProps) {
   return (
     <View style={styles.slot}>
       <View style={styles.slotHeader}>
@@ -208,20 +265,43 @@ function MealSlot({ icon, label, recipe, onView, onClear, onAdd }: MealSlotProps
       </View>
 
       {recipe ? (
-        <View style={styles.recipeRow}>
-          <TouchableOpacity style={styles.recipeCard} onPress={onView} activeOpacity={0.75}>
-            <View style={styles.recipeCardBody}>
-              <Text style={styles.recipeTitle}>{recipe.title}</Text>
-              <Text style={styles.recipeMeta}>
-                {recipe.category} · ⏱ {recipe.prep_time} min
-              </Text>
-            </View>
-            <Text style={styles.recipeChevron}>›</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.clearBtn} onPress={onClear} activeOpacity={0.7}>
-            <Text style={styles.clearBtnText}>✕</Text>
-          </TouchableOpacity>
-        </View>
+        <>
+          <View style={styles.recipeRow}>
+            <TouchableOpacity style={styles.recipeCard} onPress={onView} activeOpacity={0.75}>
+              <View style={styles.recipeCardBody}>
+                <Text style={styles.recipeTitle}>{recipe.title}</Text>
+                <Text style={styles.recipeMeta}>
+                  {recipe.category} · ⏱ {recipe.prep_time} min
+                </Text>
+              </View>
+              <Text style={styles.recipeChevron}>›</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.clearBtn} onPress={onClear} activeOpacity={0.7}>
+              <Text style={styles.clearBtnText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Accompagnements */}
+          <View style={styles.sideSection}>
+            <Text style={styles.sideLabel}>Accompagnements</Text>
+            <SideSlot
+              side={sideRecipe}
+              onView={onViewSide}
+              onClear={onClearSide}
+              onAdd={onAddSide}
+              placeholder="Ajouter un accompagnement"
+            />
+            {(sideRecipe || side2Recipe) && (
+              <SideSlot
+                side={side2Recipe}
+                onView={onViewSide2}
+                onClear={onClearSide2}
+                onAdd={onAddSide2}
+                placeholder="Ajouter un 2ème accompagnement"
+              />
+            )}
+          </View>
+        </>
       ) : (
         <TouchableOpacity style={styles.addSlotBtn} onPress={onAdd} activeOpacity={0.7}>
           <Text style={styles.addSlotIcon}>+</Text>
@@ -240,8 +320,8 @@ interface DayPageProps {
   height: number;
   isToday: boolean;
   router: ReturnType<typeof useRouter>;
-  onClearMeal: (dateStr: string, slot: 'lunch' | 'dinner') => void;
-  onAddMeal: (dateStr: string, slot: 'lunch' | 'dinner') => void;
+  onClearMeal: (dateStr: string, slot: 'lunch' | 'dinner' | 'lunch_side' | 'dinner_side' | 'lunch_side2' | 'dinner_side2') => void;
+  onAddMeal: (dateStr: string, slot: 'lunch' | 'dinner' | 'lunch_side' | 'dinner_side' | 'lunch_side2' | 'dinner_side2') => void;
 }
 
 function DayPage({ day, width, height, isToday, router, onClearMeal, onAddMeal }: DayPageProps) {
@@ -257,17 +337,33 @@ function DayPage({ day, width, height, isToday, router, onClearMeal, onAddMeal }
           icon="🥗"
           label="Midi"
           recipe={day.lunchRecipe}
+          sideRecipe={day.lunchSideRecipe}
+          side2Recipe={day.lunchSide2Recipe}
           onView={() => router.push(`/recipe/${day.lunchRecipe!.id}`)}
           onClear={() => onClearMeal(day.dateStr, 'lunch')}
           onAdd={() => onAddMeal(day.dateStr, 'lunch')}
+          onViewSide={() => router.push(`/recipe/${day.lunchSideRecipe!.id}`)}
+          onClearSide={() => onClearMeal(day.dateStr, 'lunch_side')}
+          onAddSide={() => onAddMeal(day.dateStr, 'lunch_side')}
+          onViewSide2={() => router.push(`/recipe/${day.lunchSide2Recipe!.id}`)}
+          onClearSide2={() => onClearMeal(day.dateStr, 'lunch_side2')}
+          onAddSide2={() => onAddMeal(day.dateStr, 'lunch_side2')}
         />
         <MealSlot
           icon="🥣"
           label="Soir"
           recipe={day.dinnerRecipe}
+          sideRecipe={day.dinnerSideRecipe}
+          side2Recipe={day.dinnerSide2Recipe}
           onView={() => router.push(`/recipe/${day.dinnerRecipe!.id}`)}
           onClear={() => onClearMeal(day.dateStr, 'dinner')}
           onAdd={() => onAddMeal(day.dateStr, 'dinner')}
+          onViewSide={() => router.push(`/recipe/${day.dinnerSideRecipe!.id}`)}
+          onClearSide={() => onClearMeal(day.dateStr, 'dinner_side')}
+          onAddSide={() => onAddMeal(day.dateStr, 'dinner_side')}
+          onViewSide2={() => router.push(`/recipe/${day.dinnerSide2Recipe!.id}`)}
+          onClearSide2={() => onClearMeal(day.dateStr, 'dinner_side2')}
+          onAddSide2={() => onAddMeal(day.dateStr, 'dinner_side2')}
         />
       </View>
     </View>
@@ -285,14 +381,19 @@ interface HomePanelProps {
 function HomePanel({ width, isFocused, focusKey }: HomePanelProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { showAlert, AlertComponent } = useAppAlert();
   const [days, setDays] = useState<DayData[]>([]);
   const [bodyHeight, setBodyHeight] = useState(0);
   const [currentDayIdx, setCurrentDayIdx] = useState(0);
   // Étape 1 : choix de la recette
-  const [pickerTarget, setPickerTarget] = useState<{ dateStr: string; slot: 'lunch' | 'dinner' } | null>(null);
+  const [pickerTarget, setPickerTarget] = useState<{ dateStr: string; slot: 'lunch' | 'dinner' | 'lunch_side' | 'dinner_side' | 'lunch_side2' | 'dinner_side2' } | null>(null);
   // Étape 2 : planning modal avec la recette choisie + pré-sélection du créneau
   const [planningRecipe, setPlanningRecipe] = useState<Recipe | null>(null);
   const [planningPreselect, setPlanningPreselect] = useState<{ dateStr: string; slot: 'lunch' | 'dinner' } | null>(null);
+  // Étape 3 : modale ajustement ingrédients → liste de courses
+  const [adjustRecipe, setAdjustRecipe] = useState<Recipe | null>(null);
+  const [adjustLines, setAdjustLines] = useState<IngredientLine[]>([]);
+  const [adjustSlots, setAdjustSlots] = useState(1);
 
   const loadData = useCallback(() => {
     const loaded: DayData[] = Array.from({ length: DAYS_COUNT }, (_, offset) => {
@@ -302,7 +403,11 @@ function HomePanel({ width, isFocused, focusKey }: HomePanelProps) {
         dateStr,
         label: formatDayLabel(dateStr, offset),
         lunchRecipe: plan.lunch ? getRecipeById(plan.lunch) : null,
+        lunchSideRecipe: plan.lunch_side ? getRecipeById(plan.lunch_side) : null,
+        lunchSide2Recipe: plan.lunch_side2 ? getRecipeById(plan.lunch_side2) : null,
         dinnerRecipe: plan.dinner ? getRecipeById(plan.dinner) : null,
+        dinnerSideRecipe: plan.dinner_side ? getRecipeById(plan.dinner_side) : null,
+        dinnerSide2Recipe: plan.dinner_side2 ? getRecipeById(plan.dinner_side2) : null,
       };
     });
     setDays(loaded);
@@ -312,22 +417,65 @@ function HomePanel({ width, isFocused, focusKey }: HomePanelProps) {
     if (isFocused) loadData();
   }, [isFocused, focusKey]);
 
-  function handleClearMeal(dateStr: string, slot: 'lunch' | 'dinner') {
+  function handleClearMeal(dateStr: string, slot: 'lunch' | 'dinner' | 'lunch_side' | 'dinner_side' | 'lunch_side2' | 'dinner_side2') {
     setMeal(dateStr, slot, null);
+    // Supprimer aussi les accompagnements si on supprime la recette principale
+    if (slot === 'lunch') { setMeal(dateStr, 'lunch_side', null); setMeal(dateStr, 'lunch_side2', null); }
+    if (slot === 'dinner') { setMeal(dateStr, 'dinner_side', null); setMeal(dateStr, 'dinner_side2', null); }
     loadData();
   }
 
   function handleSelectRecipe(recipe: Recipe) {
-    // Mémorise le créneau pré-sélectionné avant de fermer le picker
-    setPlanningPreselect(pickerTarget);
+    if (!pickerTarget) return;
+    const { dateStr, slot } = pickerTarget;
     setPickerTarget(null);
-    setPlanningRecipe(recipe);
+
+    if (slot === 'lunch_side' || slot === 'dinner_side' || slot === 'lunch_side2' || slot === 'dinner_side2') {
+      // Accompagnement : assigner directement sans passer par la PlanningModal
+      setMeal(dateStr, slot, recipe.id);
+      loadData();
+      setAdjustRecipe(recipe);
+      setAdjustLines(parseIngredients(recipe.ingredients, 1));
+      setAdjustSlots(1);
+    } else {
+      // Recette principale : flux habituel via PlanningModal
+      setPlanningPreselect({ dateStr, slot });
+      setPlanningRecipe(recipe);
+    }
   }
 
-  function handlePlanningConfirm() {
+  function handlePlanningConfirm(newSlots: number) {
+    if (planningRecipe && newSlots > 0) {
+      setAdjustRecipe(planningRecipe);
+      setAdjustLines(parseIngredients(planningRecipe.ingredients, newSlots));
+      setAdjustSlots(newSlots);
+    }
     setPlanningRecipe(null);
     setPlanningPreselect(null);
     loadData();
+  }
+
+  function handleAddToShopping(lines: IngredientLine[]) {
+    if (!adjustRecipe) return;
+    const active = lines.filter((l) => l.qty !== null ? l.currentQty > 0 : l.included);
+    const existing = getShoppingList().filter((i) => i.recipe_name === adjustRecipe.title && i.done === 0);
+    const toInsert: { name: string; recipe_name: string }[] = [];
+    for (const line of active) {
+      const newName = reconstructLine(line);
+      const baseKey = line.name.toLowerCase().trim();
+      const match = existing.find((e) => ingredientBaseKey(e.name) === baseKey);
+      if (match) {
+        updateShoppingItemName(match.id, sumIngredientNames(match.name, newName));
+      } else {
+        toInsert.push({ name: newName, recipe_name: adjustRecipe.title });
+      }
+    }
+    if (toInsert.length > 0) addToShoppingList(toInsert);
+    setAdjustRecipe(null);
+    showAlert({
+      title: 'Courses mises à jour !',
+      message: `${active.length} ingrédient${active.length > 1 ? 's' : ''} ajouté${active.length > 1 ? 's' : ''} à ta liste de courses.`,
+    });
   }
 
   const plannedCount = days.reduce((acc, d) => {
@@ -428,6 +576,21 @@ function HomePanel({ width, isFocused, focusKey }: HomePanelProps) {
           onConfirm={handlePlanningConfirm}
         />
       )}
+
+      {/* Étape 3 : modale ajustement ingrédients → liste de courses */}
+      {adjustRecipe && (
+        <IngredientsAdjustModal
+          visible
+          recipe={adjustRecipe}
+          lines={adjustLines}
+          totalSlots={adjustSlots}
+          onClose={() => setAdjustRecipe(null)}
+          onAdd={handleAddToShopping}
+          onLinesChange={setAdjustLines}
+        />
+      )}
+
+      {AlertComponent}
     </View>
   );
 }
@@ -659,6 +822,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#DC2626',
     fontWeight: typography.fontWeights.bold,
+  },
+
+  // Section accompagnement
+  sideSection: {
+    gap: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  sideLabel: {
+    fontSize: typography.fontSizes.xs,
+    fontWeight: typography.fontWeights.bold,
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  sideCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  sideTitleText: {
+    fontSize: typography.fontSizes.md,
+    fontWeight: typography.fontWeights.semiBold,
+    color: colors.textPrimary,
+  },
+  addSideBtn: {
+    paddingVertical: spacing.sm,
   },
 
   // Créneau vide → bouton ajout
