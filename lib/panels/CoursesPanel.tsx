@@ -1,10 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   FlatList,
   TouchableOpacity,
   StyleSheet,
+  TextInput,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,6 +17,7 @@ import {
   toggleShoppingItem,
   clearShoppingList,
   deleteShoppingItemsByIds,
+  addToShoppingList,
 } from '../database';
 import type { ShoppingItem } from '../database';
 import { colors, typography, spacing, radii, shadows } from '../theme';
@@ -21,19 +26,17 @@ import { useAppAlert } from '../AppAlert';
 // ─── Rayons supermarché ───────────────────────────────────────
 
 const RAYONS: { label: string; emoji: string; keywords: string[] }[] = [
+  // ── Alimentaire ──────────────────────────────────────────────
   {
     label: 'Fruits & Légumes',
     emoji: '🥦',
     keywords: [
-      // Légumes
       'tomate', 'oignon', 'échalote', 'ail', 'carotte', 'poireau', 'courgette', 'champignon',
       'poivron', 'aubergine', 'brocoli', 'épinard', 'chou', 'céleri', 'artichaut', 'asperge',
       'betterave', 'concombre', 'fenouil', 'navet', 'radis', 'patate douce', 'pomme de terre',
       'potiron', 'potimarron', 'butternut', 'courge', 'maïs', 'petit pois', 'endive', 'laitue',
-      'roquette', 'mâche', 'avocat', 'haricot', 'pois chiche', 'fève',
-      // Herbes fraîches
+      'roquette', 'mâche', 'avocat', 'haricot vert', 'pois chiche', 'fève',
       'persil', 'basilic', 'ciboulette', 'menthe',
-      // Fruits
       'pomme', 'poire', 'banane', 'fraise', 'framboise', 'cerise', 'abricot', 'pêche', 'prune',
       'raisin', 'orange', 'citron', 'ananas', 'mangue', 'kiwi', 'melon', 'figue', 'myrtille',
       'fruit', 'légume', 'salade',
@@ -42,36 +45,34 @@ const RAYONS: { label: string; emoji: string; keywords: string[] }[] = [
   {
     label: 'Viandes',
     emoji: '🥩',
-    keywords: ['poulet', 'guanciale', 'viande', 'bœuf', 'porc', 'lardon', 'jambon', 'veau', 'agneau', 'canard', 'dinde'],
+    keywords: ['poulet', 'guanciale', 'viande', 'bœuf', 'porc', 'lardon', 'jambon', 'veau', 'agneau', 'canard', 'dinde', 'saucisse', 'merguez', 'chorizo', 'steak', 'escalope', 'côtelette'],
   },
   {
     label: 'Poissons & Fruits de mer',
     emoji: '🐟',
-    keywords: ['thon', 'anchois', 'poisson', 'saumon', 'crevette', 'merlan', 'cabillaud', 'moule', 'calmar', 'seiche'],
+    keywords: ['thon', 'anchois', 'poisson', 'saumon', 'crevette', 'merlan', 'cabillaud', 'moule', 'calmar', 'seiche', 'dorade', 'bar', 'lieu', 'sardine', 'maquereau', 'homard', 'crabe', 'langoustine'],
   },
   {
     label: 'Produits laitiers',
     emoji: '🧀',
-    keywords: ['beurre', 'crème', 'œuf', 'oeuf', 'gruyère', 'pecorino', 'fromage', 'lait', 'yaourt', 'parmesan', 'mozzarella', 'ricotta', 'comté'],
+    keywords: ['beurre', 'crème', 'œuf', 'oeuf', 'gruyère', 'pecorino', 'fromage', 'lait', 'yaourt', 'parmesan', 'mozzarella', 'ricotta', 'comté', 'emmental', 'gouda', 'camembert', 'brie', 'roquefort', 'feta', 'cottage', 'mascarpone', 'crème fraîche'],
   },
   {
     label: 'Boulangerie',
     emoji: '🥖',
-    keywords: ['baguette', 'pain', 'brioche'],
+    keywords: ['baguette', 'pain', 'brioche', 'croissant', 'pain de mie', 'bagel', 'wrap', 'tortilla'],
   },
   {
     label: 'Épicerie',
     emoji: '🌾',
-    keywords: ['pâte', 'farine', 'sucre', 'sel', 'poivre', 'huile', 'vinaigre', 'bouillon', 'cassonade', 'moutarde', 'sauce', 'riz', 'lentille', 'fécule', 'levure', 'chocolat', 'miel'],
+    keywords: ['pâte', 'farine', 'sucre', 'sel', 'poivre', 'huile', 'vinaigre', 'bouillon', 'cassonade', 'moutarde', 'sauce', 'riz', 'lentille', 'fécule', 'levure', 'chocolat', 'miel', 'confiture', 'biscuit', 'céréale', 'granola', 'muesli', 'chips', 'crackers'],
   },
   {
     label: 'Épices',
     emoji: '🌶️',
     keywords: [
-      // Épices
       'cumin', 'curcuma', 'curry', 'paprika', 'cannelle', 'vanille', 'cardamome', 'coriandre',
       'gingembre', 'piment', 'safran', 'muscade', 'anis', 'clou de girofle', 'fenugrec',
-      // Herbes séchées
       'thym', 'romarin', 'laurier', 'origan', 'sauge', 'estragon', 'aneth', 'herbe de provence',
     ],
   },
@@ -79,24 +80,122 @@ const RAYONS: { label: string; emoji: string; keywords: string[] }[] = [
     label: 'Cuisine du monde',
     emoji: '🌍',
     keywords: [
-      // Asiatique — sauces & condiments
       'soja', 'nuoc mam', 'miso', 'hoisin', 'teriyaki', 'oyster', 'sriracha', 'sambal',
       'mirin', 'saké', 'vinaigre de riz', 'huile de sésame', 'pâte de curry', 'wasabi', 'tahini',
-      // Asiatique — produits secs
       'nouille', 'vermicelle de riz', 'soba', 'udon', 'ramen', 'galette de riz', 'feuille de riz',
       'lait de coco', 'crème de coco', 'pâte de tamarin', 'tofu',
-      // Mexicain / Tex-Mex
-      'tortilla', 'nachos', 'jalapeño', 'guacamole', 'salsa', 'haricot noir', 'haricot rouge',
-      // Moyen-Orient
+      'tortillas', 'nachos', 'jalapeño', 'guacamole', 'salsa', 'haricot noir', 'haricot rouge',
       'houmous', 'pita', 'chapati', 'naan', 'semoule', 'couscous', 'boulgour',
-      // Autres
       'kimchi', 'tempeh', 'edamame',
     ],
   },
   {
     label: 'Boissons',
     emoji: '🍷',
-    keywords: ['vin', 'jus', 'eau', 'bière', 'cidre'],
+    keywords: ['vin', 'jus', 'eau', 'bière', 'cidre', 'soda', 'cola', 'limonade', 'sirop', 'thé', 'café', 'infusion', 'kombucha', 'smoothie'],
+  },
+  // ── Non-alimentaire ──────────────────────────────────────────
+  {
+    label: 'Hygiène & Beauté',
+    emoji: '🧴',
+    keywords: [
+      // Cheveux
+      'shampoing', 'après-shampoing', 'démêlant', 'masque capillaire', 'gel coiffant', 'laque',
+      // Corps & visage
+      'savon', 'gel douche', 'bain moussant', 'gant de toilette', 'serviette', 'loofah',
+      'crème hydratante', 'lotion corps', 'beurre corporel', 'huile corps',
+      // Soins visage
+      'nettoyant visage', 'tonique', 'sérum', 'crème visage', 'contour des yeux', 'masque visage', 'gommage',
+      // Solaire
+      'crème solaire', 'après-soleil', 'autobronzant',
+      // Maquillage
+      'fond de teint', 'bb crème', 'correcteur', 'mascara', 'eye-liner', 'rouge à lèvres', 'gloss',
+      'fard à paupières', 'blush', 'poudre', 'highlighter', 'démaquillant', 'dissolvant',
+      // Dentaire
+      'dentifrice', 'brosse à dent', 'brosse à dents', 'fil dentaire', 'bain de bouche', 'blanchiment',
+      // Déodorant / rasage
+      'déodorant', 'anti-transpirant', 'rasoir', 'mousse à raser', 'gel à raser', 'après-rasage',
+      'épilateur', 'cire', 'lame',
+      // Coton & divers
+      'coton', 'coton-tige', 'lingette', 'mouchoir', 'kleenex',
+      // Féminin
+      'serviette hygiénique', 'tampon', 'cup menstruelle', 'protège-slip',
+      // Parfum
+      'parfum', 'eau de toilette', 'déodorant',
+    ],
+  },
+  {
+    label: 'Entretien maison',
+    emoji: '🧹',
+    keywords: [
+      // Lessive
+      'lessive', 'assouplissant', 'détachant', 'filet de lavage',
+      // Vaisselle
+      'liquide vaisselle', 'pastille lave-vaisselle', 'sel lave-vaisselle', 'rinçage lave-vaisselle',
+      // Nettoyage
+      'nettoyant', 'désinfectant', 'javel', 'eau de javel', 'détartrant', 'anticalcaire',
+      'nettoyant WC', 'nettoyant salle de bain', 'nettoyant cuisine', 'dégraissant',
+      'nettoyant sol', 'cire parquet',
+      // Outils ménagers
+      'éponge', 'gratte-éponge', 'lavette', 'chiffon microfibre', 'brosse', 'balai',
+      'serpillière', 'balai vapeur', 'pelle', 'raclette', 'aspirateur',
+      // Sacs & emballages
+      'sac poubelle', 'sac plastique', 'sac congélation', 'film plastique', 'papier aluminium',
+      'papier cuisson', 'boîte hermétique',
+      // Papier ménager
+      'papier essuie-tout', 'sopalin', 'papier toilette', 'papier hygiénique',
+      // Piles & éclairage
+      'pile', 'ampoule', 'led',
+      // Divers maison
+      'allumette', 'bougie', 'diffuseur', 'désodorisant', 'anti-mite', 'anti-moustique',
+      'ruban adhésif', 'scotch', 'colle',
+    ],
+  },
+  {
+    label: 'Animalerie',
+    emoji: '🐾',
+    keywords: [
+      'croquette', 'pâtée', 'nourriture chat', 'nourriture chien', 'nourriture poisson',
+      'litière', 'litière chat', 'jouet chat', 'jouet chien',
+      'laisse', 'collier', 'harnais', 'cage', 'aquarium',
+      'antiparasitaire', 'pipette', 'vermifuge',
+    ],
+  },
+  {
+    label: 'Bébé',
+    emoji: '👶',
+    keywords: [
+      'couche', 'couches', 'culotte apprentissage', 'lingette bébé',
+      'lait infantile', 'lait maternisé', 'petit pot', 'compote bébé',
+      'biberon', 'tétine', 'sucette', 'tire-lait',
+      'crème bébé', 'liniment', 'talc bébé', 'gel de dentition',
+      'baignoire bébé', 'thermomètre bain',
+    ],
+  },
+  {
+    label: 'Pharmacie & Santé',
+    emoji: '💊',
+    keywords: [
+      'doliprane', 'paracétamol', 'ibuprofène', 'aspirine', 'antidouleur',
+      'sirop', 'pastille gorge', 'spray nasal', 'collyre',
+      'pansement', 'bandage', 'compresse', 'sparadrap', 'antiseptique',
+      'thermomètre', 'tensiomètre',
+      'vitamine', 'complément alimentaire', 'magnésium', 'oméga',
+      'probiotique', 'antiacide', 'laxatif', 'antidiarrhéique',
+      'crème anti-démangeaison', 'crème chauffante',
+      'préservatif', 'test de grossesse',
+    ],
+  },
+  {
+    label: 'Papeterie & Bureau',
+    emoji: '📝',
+    keywords: [
+      'stylo', 'crayon', 'feutre', 'marqueur', 'surligneur',
+      'cahier', 'bloc-notes', 'carnet', 'agenda', 'post-it',
+      'enveloppe', 'timbre', 'papier', 'feuille',
+      'ciseaux', 'règle', 'agrafeuse', 'trombone',
+      'cartouche encre', 'toner',
+    ],
   },
 ];
 
@@ -161,6 +260,9 @@ export function CoursesPanel({ width, isFocused, focusKey }: CoursesPanelProps) 
   const insets = useSafeAreaInsets();
   const [items, setItems] = useState<ShoppingItem[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('recette');
+  const [addModalVisible, setAddModalVisible] = useState(false);
+  const [newItem, setNewItem] = useState('');
+  const inputRef = useRef<TextInput>(null);
   const { showAlert, AlertComponent } = useAppAlert();
 
   useEffect(() => {
@@ -170,6 +272,15 @@ export function CoursesPanel({ width, isFocused, focusKey }: CoursesPanelProps) 
   function handleToggle(id: number) {
     toggleShoppingItem(id);
     setItems(getShoppingList());
+  }
+
+  function handleAddItem() {
+    const name = newItem.trim();
+    if (!name) return;
+    addToShoppingList([{ name, recipe_name: '' }]);
+    setItems(getShoppingList());
+    setNewItem('');
+    setAddModalVisible(false);
   }
 
   function handleClearAll() {
@@ -303,6 +414,65 @@ export function CoursesPanel({ width, isFocused, focusKey }: CoursesPanelProps) 
           }}
         />
       )}
+      {/* Bouton Ajouter */}
+      <TouchableOpacity
+        style={[s.fab, { bottom: insets.bottom + spacing.xl }]}
+        onPress={() => setAddModalVisible(true)}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="add" size={20} color={colors.surface} />
+        <Text style={s.fabText}>Ajouter</Text>
+      </TouchableOpacity>
+
+      {/* Modal ajout article */}
+      <Modal
+        visible={addModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { setAddModalVisible(false); setNewItem(''); }}
+      >
+        <KeyboardAvoidingView
+          style={s.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => { setAddModalVisible(false); setNewItem(''); }}
+          />
+          <View style={s.modalBox}>
+            <Text style={s.modalTitle}>Ajouter un article</Text>
+            <TextInput
+              ref={inputRef}
+              style={s.modalInput}
+              placeholder="Ex : Shampoing, Piles AA…"
+              placeholderTextColor={colors.textSecondary}
+              value={newItem}
+              onChangeText={setNewItem}
+              onSubmitEditing={handleAddItem}
+              returnKeyType="done"
+              autoFocus
+            />
+            <View style={s.modalActions}>
+              <TouchableOpacity
+                style={s.modalCancelBtn}
+                onPress={() => { setAddModalVisible(false); setNewItem(''); }}
+                activeOpacity={0.7}
+              >
+                <Text style={s.modalCancelText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.modalConfirmBtn, !newItem.trim() && s.modalConfirmBtnDisabled]}
+                onPress={handleAddItem}
+                activeOpacity={0.7}
+                disabled={!newItem.trim()}
+              >
+                <Text style={s.modalConfirmText}>Ajouter</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
       {AlertComponent}
     </View>
   );
@@ -480,5 +650,83 @@ const s = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: typography.lineHeights.normal,
+  },
+  fab: {
+    position: 'absolute',
+    right: spacing.xl,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radii.full,
+    ...shadows.md,
+  },
+  fabText: {
+    fontSize: typography.fontSizes.md,
+    fontWeight: typography.fontWeights.bold,
+    color: colors.surface,
+  },
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+  },
+  modalBox: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radii.xl,
+    borderTopRightRadius: radii.xl,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xxxxl,
+    gap: spacing.lg,
+  },
+  modalTitle: {
+    fontSize: typography.fontSizes.lg,
+    fontWeight: typography.fontWeights.bold,
+    color: colors.textPrimary,
+  },
+  modalInput: {
+    backgroundColor: colors.background,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    fontSize: typography.fontSizes.md,
+    color: colors.textPrimary,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    borderRadius: radii.md,
+    alignItems: 'center',
+    backgroundColor: colors.background,
+  },
+  modalCancelText: {
+    fontSize: typography.fontSizes.md,
+    fontWeight: typography.fontWeights.semiBold,
+    color: colors.textSecondary,
+  },
+  modalConfirmBtn: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    borderRadius: radii.md,
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+  },
+  modalConfirmBtnDisabled: {
+    backgroundColor: colors.border,
+  },
+  modalConfirmText: {
+    fontSize: typography.fontSizes.md,
+    fontWeight: typography.fontWeights.semiBold,
+    color: colors.surface,
   },
 });
