@@ -6,11 +6,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
-  Platform,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
 import { importRecipes } from './database';
 import { colors, typography, spacing, radii, shadows } from './theme';
 
@@ -78,18 +75,6 @@ Règles pour les étapes (steps) :
 Voici la ou les recettes à convertir :
 [COLLE ICI TA RECETTE]`;
 
-// ─── Helpers ──────────────────────────────────────────────────
-
-async function readFileContent(uri: string): Promise<string> {
-  // Web : URI blob/data, on fetch directement
-  if (uri.startsWith('data:') || uri.startsWith('blob:') || uri.startsWith('http')) {
-    const res = await fetch(uri);
-    return res.text();
-  }
-  // Native : on lit via FileSystem
-  return FileSystem.readAsStringAsync(uri);
-}
-
 // ─── Composant ────────────────────────────────────────────────
 
 interface ImportModalProps {
@@ -133,34 +118,6 @@ export function ImportModal({ visible, onClose, onImported }: ImportModalProps) 
         setStep({ kind: 'error', message: msg });
       } else {
         setStep({ kind: 'success', count: result.imported });
-        onImported();
-      }
-    } catch (e: unknown) {
-      setStep({ kind: 'error', message: String(e) });
-    }
-  }
-
-  async function handleFile() {
-    setStep({ kind: 'loading' });
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: Platform.OS === 'web' ? 'application/json' : '*/*',
-        copyToCacheDirectory: true,
-      });
-      if (result.canceled || !result.assets?.[0]) {
-        setStep({ kind: 'idle' });
-        return;
-      }
-      const uri = result.assets[0].uri;
-      const text = await readFileContent(uri);
-      const imported = importRecipes(text);
-      if (imported.imported === 0) {
-        const msg = imported.errors.length > 0
-          ? imported.errors.join('\n')
-          : 'Aucune recette valide trouvée dans le fichier.';
-        setStep({ kind: 'error', message: msg });
-      } else {
-        setStep({ kind: 'success', count: imported.imported });
         onImported();
       }
     } catch (e: unknown) {
@@ -218,15 +175,6 @@ export function ImportModal({ visible, onClose, onImported }: ImportModalProps) 
                   </View>
                 </TouchableOpacity>
 
-                <View style={s.separator} />
-
-                <TouchableOpacity style={s.actionBtn} onPress={handleFile} activeOpacity={0.75}>
-                  <Text style={s.actionIcon}>📂</Text>
-                  <View>
-                    <Text style={s.actionTitle}>Depuis un fichier JSON</Text>
-                    <Text style={s.actionDesc}>Choisissez un fichier sur votre appareil</Text>
-                  </View>
-                </TouchableOpacity>
               </View>
             )}
 
