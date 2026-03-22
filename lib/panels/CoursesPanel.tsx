@@ -61,7 +61,7 @@ const RAYONS: { label: string; emoji: string; keywords: string[] }[] = [
   },
   {
     label: 'Épicerie',
-    emoji: '🫙',
+    emoji: '🌾',
     keywords: ['pâte', 'farine', 'sucre', 'sel', 'poivre', 'huile', 'vinaigre', 'bouillon', 'cassonade', 'moutarde', 'sauce', 'riz', 'lentille', 'fécule', 'levure', 'chocolat', 'miel'],
   },
   {
