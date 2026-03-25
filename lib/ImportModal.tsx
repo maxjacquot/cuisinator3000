@@ -51,10 +51,12 @@ Génère un tableau JSON en respectant exactement ce format :
 
 Règles générales :
 - "category" : uniquement "Plat", "Entrée" ou "Dessert"
-- "prep_time" : temps total en minutes (somme de toutes les étapes)
-- "cook_time" : temps de cuisson seul en minutes (0 si aucun)
+- "prep_time" : somme des durées des étapes de type "prep" uniquement (0 si aucune)
+- "cook_time" : somme des durées des étapes de type "cook" uniquement (0 si aucune)
 - "type" dans les steps : "prep" (préparation active), "cook" (cuisson active), "wait" (attente/four/frigo), "rest" (repos après cuisson)
 - "tags" : tableau de mots-clés parmi : végétarien, vegan, carnivore, poisson, volaille, sandwich, soupe, salade, pâtes, riz, rapide, batch-cooking, sans-gluten, épicé, doux, enfants, light, fait-maison — 1 à 5 tags max
+- Les quantités d'ingrédients doivent être pour 1 personne uniquement
+- Ne pas inclure d'accompagnement dans la recette (pas de "servir avec...", "accompagner de…", etc.) — la recette doit être autonome et complète en elle-même
 
 Règles pour les ingrédients :
 - Chaque ingrédient est un objet { "qty", "unit", "name" }
