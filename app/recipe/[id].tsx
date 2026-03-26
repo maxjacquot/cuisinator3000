@@ -432,16 +432,13 @@ export default function RecipeScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           style={styles.container}
-          contentContainerStyle={[styles.content, { paddingTop: 0 }]}
+          contentContainerStyle={[styles.content, { paddingTop: 0, paddingBottom: 100 }]}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Barre Annuler / Enregistrer */}
+          {/* Barre Annuler */}
           <View style={editS.actionBar}>
             <TouchableOpacity onPress={cancelEdit} style={editS.cancelBtn}>
               <Text style={editS.cancelText}>Annuler</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={saveEdit} style={editS.saveBtn}>
-              <Text style={editS.saveText}>Enregistrer</Text>
             </TouchableOpacity>
           </View>
 
@@ -602,6 +599,11 @@ export default function RecipeScreen() {
             <Text style={styles.deleteBtnText}>Supprimer la recette</Text>
           </TouchableOpacity>
         </ScrollView>
+
+        {/* Bouton flottant Enregistrer */}
+        <TouchableOpacity style={editS.floatingSaveBtn} onPress={saveEdit} activeOpacity={0.88}>
+          <Text style={editS.floatingSaveText}>✓  Enregistrer</Text>
+        </TouchableOpacity>
       </KeyboardAvoidingView>
     );
   }
@@ -656,22 +658,9 @@ export default function RecipeScreen() {
 
         <View style={styles.divider} />
 
-        {/* Description */}
-        <Text style={styles.sectionLabel}>Description</Text>
-        <Text style={styles.description}>{recipe.description}</Text>
-
-        {/* Étapes */}
-        {steps.length > 0 && (
-          <>
-            <View style={styles.divider} />
-            <RecipeTimeline steps={steps} />
-          </>
-        )}
-
         {/* Ingrédients */}
         {ingredients.length > 0 && (
           <>
-            <View style={styles.divider} />
             <Text style={styles.sectionLabel}>Ingrédients</Text>
             <View style={styles.ingredientsList}>
               {ingredients.map((ing, i) => (
@@ -693,6 +682,19 @@ export default function RecipeScreen() {
             >
               <Text style={styles.planningBtnText}>📅  Ajouter au planning</Text>
             </TouchableOpacity>
+            <View style={styles.divider} />
+          </>
+        )}
+
+        {/* Description */}
+        <Text style={styles.sectionLabel}>Description</Text>
+        <Text style={styles.description}>{recipe.description}</Text>
+
+        {/* Étapes */}
+        {steps.length > 0 && (
+          <>
+            <View style={styles.divider} />
+            <RecipeTimeline steps={steps} />
           </>
         )}
 
@@ -868,14 +870,17 @@ const editS = StyleSheet.create({
   },
   cancelBtn: { paddingVertical: spacing.xs, paddingHorizontal: spacing.sm },
   cancelText: { color: 'rgba(255,255,255,0.55)', fontSize: typography.fontSizes.md },
-  saveBtn: {
+  floatingSaveBtn: {
+    position: 'absolute',
+    bottom: 32,
+    alignSelf: 'center',
     backgroundColor: colors.primary,
-    paddingVertical: spacing.xs + 2,
-    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xxxxl,
     borderRadius: radii.full,
     ...shadows.primary,
   },
-  saveText: { color: colors.surface, fontSize: typography.fontSizes.md, fontWeight: typography.fontWeights.bold },
+  floatingSaveText: { color: colors.surface, fontSize: typography.fontSizes.md, fontWeight: typography.fontWeights.bold },
 
   // Catégorie
   categoryRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
